@@ -1,0 +1,106 @@
+.msgs-boxs {
+    max-height: 67vh; /* Adjust as needed */
+    overflow-y: auto;
+  }
+
+  .inp-attach {
+    border-radius: 9999px; /* Full rounded */
+    display: flex;   
+    padding-left: 2rem;
+    padding-right: 0.50rem;
+    width: 100%;
+  }
+  .rep-i-pop{
+    height: 22px;
+    width: 22px;   
+    padding: 2px;
+    border-radius: 20%;
+    background-color: #fff; 
+position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;  
+  }
+  .rep-i-pop svg   {
+    width: 14px;
+    height: 14px;    
+    font-size: 14px;
+  }
+  .cursor-pointer {
+    cursor: pointer;
+  }
+
+  .bg-yellow-400 {
+    background-color: #facc15; /* Yellow */
+  }
+
+  .text-black {
+    color: #000;
+  }
+
+  .rounded-full {
+    border-radius: 9999px;
+  }
+
+  .px-3 {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .py-2 {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .text-xs {
+    font-size: 0.75rem;
+  }
+
+  /* Container for the image preview */
+
+/* Container for the image preview */
+.image-preview-container {
+  position: absolute !important;
+  display: inline-block;
+  margin-top: 8px; /* Add some space above the image */
+  max-width: 200px; /* Adjust as per your design */
+  max-height: 200px; /* Adjust as per your design */
+  border-radius: 8px;
+  border: 2px solid #ddd; /* Light border around the preview */
+  overflow: hidden;
+  bottom: 88px !important;
+}
+
+
+.image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; 
+  border-radius: 8px;
+}
+
+
+.remove-image-preview {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(0, 0, 0, 0.5); 
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 12px;
+  height: 1.5rem;
+  width: 1.5rem;
+
+}
+
+.remove-image-preview:hover {
+  background-color: rgba(0, 0, 0, 0.7); 
+}
+.w-32{
+  width: 14rem !important;
+}
+.h-32 {
+  height: 5rem !important;
+}

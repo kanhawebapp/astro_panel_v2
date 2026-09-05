@@ -1,0 +1,258 @@
+/* 
+.container {
+
+    position: fixed !important;
+    top: 0;
+  
+    z-index:999;
+
+}
+
+.container .astrohead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 80vw;
+    max-width: 1200px;
+    padding: 20px 30px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(20px);
+    box-shadow: inset 3px 3px 10px #371c57, inset -3px -3px 10px #5e307d;
+    background-color: #2f1254;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.astronavlinks {
+    display: flex;
+    gap: 20px;
+    position: relative;
+    overflow: visible;
+}
+
+.astronavlinks .astroheadlinks {
+    text-decoration: none;
+    color: #333;
+    font-size: 15px;
+    padding: .4rem .7rem;
+    background: #ffffff5c;
+    border-radius: 10px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 6px rgba(255, 255, 255, 0.2), 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.astronavlinks .astroheadlinks:hover {
+    transform: translateY(-3px);
+    box-shadow: 1px 1px 5px #bebebe, -1px -1px 5px #ffffff;
+}
+
+.astroprofile:hover {
+    transform: scale(1.08) translateY(-3px);
+} */
+
+.container {
+    position: fixed !important;
+    top: 0;
+    /* width: 100vw; */
+    z-index: 55;
+    display: flex;
+    justify-content: center;
+    background: transparent;
+    /* padding: 10px 0; */
+    /* padding-right: 20px; */
+    /* margin-left: 49px; */
+    margin-left: 0px;
+    /* margin-right: px; */
+
+}
+
+.container .astrohead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* width: 92vw; */
+    width: 100vw;
+    /* width: 100vw; */
+    
+    /* max-width: 1200px; */
+    padding: 15px 20px ;
+    /* border-radius: ; */
+    border-bottom-right-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(15px);
+    box-shadow: inset 3px 3px 10px #371c57, inset -3px -3px 10px #5e307d;
+    background-color: #2f1254;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.astronavlinks {
+    display: flex;
+    gap: 15px;
+    position: relative;
+    overflow: visible;
+}
+
+/* Navbar Links */
+.astronavlinks .astroheadlinks {
+    text-decoration: none;
+    color: #fff;
+    font-size: 15px;
+    padding: 0.5rem 0.8rem;
+    background: #ffffff5c;
+    border-radius: 10px;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 6px rgba(255, 255, 255, 0.2), 0 -2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.astronavlinks .astroheadlinks:hover {
+    transform: translateY(-3px);
+    box-shadow: 1px 1px 5px #bebebe, -1px -1px 5px #ffffff;
+}
+
+/* Profile Hover Effect */
+.astroprofile:hover {
+    transform: scale(1.08) translateY(-3px);
+    
+    /* margin-left: 1rem; */
+}
+
+/* Responsive Styles */
+@media (max-width: 1410px) { /* Tablets */
+    .container .astrohead {
+        /* width:90vw; */
+        padding: 15px;
+    }
+    
+    .astronavlinks {
+        gap: 10px;
+    }
+
+    .astronavlinks .astroheadlinks {
+        padding: 0.4rem 0.6rem;
+        font-size: 14px;
+    }
+    
+    .astronavlinks .astroprofile img {
+        width: 30px;
+        height: 30px;
+    }
+}
+@media (max-width: 1024px) { /* Tablets */
+    .container .astrohead {
+        width:100vw;
+        padding: 15px;
+    }
+    
+    .astronavlinks {
+        gap: 10px;
+    }
+
+    .astronavlinks .astroheadlinks {
+        padding: 0.4rem 0.6rem;
+        font-size: 14px;
+    }
+    
+    .astronavlinks .astroprofile img {
+        width: 30px;
+        height: 30px;
+    }
+}
+@media (min-width: 769px){
+    .logoImage{
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 768px) { /* Mobile */
+    
+
+    .container .astrohead {
+        /* width: 100vw; */
+        flex-direction: column;
+        /* align-items: center; */
+        padding: 10px;
+        border-radius: 0;
+        /* padding-right: ; */
+        /* margin-right: 30px; */
+       
+    }
+
+    .astronavlinks {
+        flex-direction: row;
+        /* justify-content: center; */
+        gap: 8px;
+        /* margin-top: 10px; */
+    }
+
+    .astronavlinks .astroheadlinks {
+        padding: 0.3rem 0.5rem;
+        font-size: 13px;
+    }
+
+  
+}
+/* @media (max-width: 468px) {
+    .container .astrohead {
+        width: 100%;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 10px;
+        border-radius: 8px;
+    } */
+  /* .container{
+    flex-direction: column;
+    justify-content: space-between;
+  }
+    .astronavlinks {
+        flex-direction: row;
+        justify-content: center;
+        /* gap: px; 
+        margin-top: 8px;
+    }
+
+    .astronavlinks .astroheadlinks {
+        padding: 0.2rem 0.4rem;
+        font-size: 12px;
+    }
+
+    .astronavlinks .astroprofile img {
+        width: 25px;
+        height: 25px;
+    }
+
+    .container .astrohead img {
+        /* width: 100px; Reduce logo size 
+        height: auto;
+    }
+}
+@media (max-width: 487px) {
+    .container .astrohead {
+        width: 100vw;
+        flex-direction: column; */
+        /* justify-content: space-between; */
+        /* padding: 10px;
+        border-radius: 8px; */
+    /* }
+} */
+@media (max-width: 468px) {
+    .astrohead{
+        /* width:100%; */
+        width:50rem;
+        /* width: 100vw; */
+        flex-direction: column;
+        display: flex;
+        /* margin-left: 10rem; */
+        justify-content: space-between;
+        padding: 10px;
+        /* border-radius: 8px; */
+        /* position:absolute; */
+        /* margin-left: 50px; */
+        /* justify-content: stretch; */
+
+    }  
+    .container{
+        width: full;
+    }
+}
+
+

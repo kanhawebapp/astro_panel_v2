@@ -1,0 +1,137 @@
+.cardTopSmBox{
+    /* padding: 1rem 1rem; */
+    gap: 2rem;
+    width: 100%;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+.cardDash{
+    /* width: 200px; */
+    height: 130px;
+    padding: 0.8rem;
+    background-color: #7E60BF;
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+    box-shadow: -10px 10px 30px rgba(0, 0, 0, 0.280);
+    transform: skewX(0deg);
+    transition: .4s;
+    overflow: hidden;
+    color: white;
+}
+
+.cardDash:hover {
+    /* transform: skew(0deg); */
+    background: #855bb1 !important;
+}
+
+.cardH1{
+    margin: .5rem;
+    color: rgb(255, 255, 255);
+    text-shadow: -10px 5px 10px rgba(0, 0, 0, 0.573);
+    font-size: 0.92rem;
+    text-align: center;
+}
+.cardBtn {
+    background: #00000027;
+    color: #fff;
+    /* box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.2), -1px -1px 10px rgba(255, 255, 255, 0.7);  */
+    border: none;
+    border-radius: 10px;
+
+    font-size: .8rem;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.cardBtn:hover {
+    background: #00000075;
+    color: #fff;
+
+}
+
+.starRatingRev input[type="radio"] {
+    display: none;
+}
+
+.starRatingRev label {
+    color: #f5c518;
+    cursor: pointer;
+    font-size: 30px;
+}
+
+.starRatingRev input[type="radio"]:checked~label,
+.starRatingRev label:hover,
+.starRatingRev label:hover~label {
+    color: #f5c518;
+}
+
+@media(max-width:768px){
+    .cardTopSmBox{
+         gap:1rem;
+         justify-content:flex-start;
+         /* padding: 2; */
+    }
+}
+
+@media(max-width:520px){
+    .cardTopSmBox{
+         gap:1rem;
+         flex-direction: row;
+         justify-content: center;
+         align-items: center;
+         /* padding: 2; */
+         /* width: 20rem; */
+    }
+    .cardDash{
+        /* width: 8rem; */
+        height: 7rem;
+        padding: 0.8rem;
+        background-color: #7E60BF;
+        border-radius: 8px;
+        backdrop-filter: blur(5px);
+        box-shadow: -10px 10px 30px rgba(0, 0, 0, 0.280);
+        transform: skewX(0deg);
+        transition: .4s;
+        overflow: hidden;
+        color: white;
+    }
+    .starRatingRev label {
+        color: #f5c518;
+        cursor: pointer;
+        font-size: 1.5rem;
+    }
+    
+.cardH1{
+    margin: .5rem;
+    color: rgb(255, 255, 255);
+    text-shadow: -10px 5px 10px rgba(0, 0, 0, 0.573);
+    font-size: 0.6rem;
+    text-align: center;
+}
+.cardBtn {
+    background: #00000027;
+    color: #fff;
+    /* box-shadow: 1px 1px 10px rgba(0, 0, 0, 0.2), -1px -1px 10px rgba(255, 255, 255, 0.7);  */
+    border: none;
+    border-radius: 10px;
+
+    font-size: .6rem;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    outline: none;
+}
+}
+@media(max-width:322px){
+    .cardTopSmBox{
+         gap:.5rem;
+         /* flex-direction: column; */
+         justify-content: center;
+         align-items: center;
+         /* padding: 2; */
+         /* width: 21rem; */
+         /* padding-right: 2rem; */
+    }
+}

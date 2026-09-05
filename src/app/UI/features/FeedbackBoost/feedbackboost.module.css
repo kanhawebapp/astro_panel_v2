@@ -1,0 +1,101 @@
+.feedbackBoost {
+    padding: 1rem 0;
+  }
+  .astroFeed {
+    gap: .5rem;
+    background: rgba(255, 255, 255, 0.54);
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    padding: 10px 20px;
+  }
+  /* .feedTop {
+    /* Add styles */
+  /* } */ 
+  .feedH3 {
+    font-size: 1.2rem;
+  }
+  .feedSp {
+    font-size: .8rem;
+  }
+  /* .feedText {
+    /* Add styles 
+  } */
+  .feedArea {
+    width: 100%;
+    height: 8rem;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+    padding: .7rem;
+  }
+  .feed-area::placeholder {
+    color: #888;
+    font-size: .7rem;
+}
+
+
+/* 
+  .feedBtn {
+    /* Add styles 
+  } */
+  .fBtn {
+    border: none;
+    color: #000000;
+    font-weight: bold;
+    outline: none;
+    border-radius: 8px;
+    font-size: .9rem;
+    padding: .3rem .7rem;
+    background-image: linear-gradient(43deg, #9551f4eb 30%, #c850c065 46%, rgba(141, 20, 255, 0.236) 80%);
+  }
+  .astroBoost {
+    background: rgba(255, 255, 255, 0.54);
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    padding: 10px 20px;
+  }
+  /* .boostTop { */
+    /* Add styles */
+  /* } */
+  .boostPanel {
+    display: flex;
+    padding: 1rem 0;
+    justify-content: space-between;
+    flex-direction: column;
+    gap: .7rem;
+  }
+
+.boostlive,
+.boostchat,
+.boostcall {
+    padding: .6rem;
+    gap: 1rem;
+    background-color: #7E60BF;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.440);
+    border-left: .5px rgba(255, 255, 255, 0.545) outset;
+    border-radius: 8px;
+}
+  .boostSp {
+    gap: .5rem;
+    font-size: .8rem;
+    color: #fff;
+  }
+
+  .form-switch .form-check-input {
+    height: 1.3rem;
+    width: 3rem;
+    background-color: rgb(244, 46, 46);
+    background-image: url(/download.svg);
+    cursor: pointer;
+}
+
+.form-switch .form-check-input:checked {
+    background-color: #30ad17;
+}
+  .svgIconBoost {
+    height: 15px;
+  }
+  
+  

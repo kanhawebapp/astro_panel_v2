@@ -1,0 +1,141 @@
+.card-panel-permi
+ {
+    background: rgba(255, 255, 255, 0.54);
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    padding: 10px 20px;
+}
+.wallet-head {
+    font-size: 1rem;
+    background-color: #2f1254;
+    border-radius: 10px;
+    color: #f5c518;
+    padding: .5rem 1rem ;
+    width:fit-content;
+}
+.astro-main-wait{
+    padding: 1rem 1rem;
+    gap: 2rem;
+    width: 100%;
+}
+.panel-access-box {
+    position: relative;
+    background: #141313e1;
+    overflow: hidden;
+    padding: 1rem;
+    gap: 1rem;
+    /* background-color: #7E60BF; */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.440);
+    border-left: .5px rgba(255, 255, 255, 0.545) outset;
+    border-radius: 8px;
+}
+
+
+.panel-access-box:hover {
+    background-color: #00000081;
+}
+
+.panel-access-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/2420363.jpg');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.6;
+    z-index: 1;
+    pointer-events: none;
+
+}
+.panel-access-box * {
+    position: relative;
+    z-index: 2;
+    color: #fff;
+}
+
+.panel-waitlist::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/10425648.jpg');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.3 !important;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.sp-off {
+    gap: 1rem;
+
+}
+.p-a-type {
+    font-size: .8rem;
+    color: #cfb0f8;
+}
+
+.p-a-t {
+    gap: .5rem;
+}
+.top-greet {
+    font-size: .88rem;
+    color: #fff;
+}
+.top-greet-h3 {
+    font-size: 1.1rem;
+    color: #2f1254;
+}
+.st-wait {
+    padding: .2rem .5rem;
+    background: #313030bd;
+    border-radius: 8px;
+    font-size: .8rem;
+    color: #fff;
+}
+@media(max-width:558px){
+    .card-panel-permi{
+        margin: 0; 
+         /* padding-top: .2rem; */
+         padding: 0; 
+    }
+    .sp-off {
+        gap: .3rem;
+    
+    }
+    .top-greet {
+        font-size: .5rem;
+        /* color: #fff; */
+    }
+  .p-a-type{
+    font-size: .5rem;
+  }
+    .astro-main-wait{
+        width: full;
+        /* height: 7rem; */
+        /* padding: 0; */
+        gap: 5; 
+        /* background-color: #f5c518; */
+    }
+    .st-wait{
+        font-size: .5rem;
+    }
+}
+@media(max-width:370px){
+    .card-panel-permi{
+        margin: 0;
+        /* padding-top: .2rem; */
+        padding: 0;
+    }
+    .astro-main-wait{
+        width: full;
+        /* padding: 0;
+        gap: 5; */
+    }
+}

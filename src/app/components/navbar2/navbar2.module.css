@@ -1,0 +1,130 @@
+.topMainDash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 54;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.25rem;
+    background-color: #7e60bf;
+    /* border-radius: 1rem; */
+    /* border-bottom-right-radius: 1rem; */
+    width: 100%;
+    max-width: 100%;
+   
+  }
+  
+  .topGreetH3 {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: white;
+  }
+  
+  .nameDy {
+    color: white;
+    font-size: 1.2rem;
+    margin-left: .3rem;
+  }
+  
+  .dashSpanInp {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    background: white;
+    padding: .2rem 1rem;
+    border-radius: 12px;
+  }
+  
+  .dashInp {
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #000000;
+    font-size: .95rem;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #77777740;
+  }
+  
+  
+  @media (min-width: 769px) and (max-width: 1279px) {
+    .topMainDash {
+       margin-top: 4.8rem;
+        margin-left: 15.4rem;
+      border-radius: 12px;
+        width: auto;
+        max-width: calc(100% - 17.4rem);
+    }
+  }
+  
+ 
+  @media (min-width: 1280px) {
+    .topMainDash {
+      margin-left: 15.4rem;
+      margin-top: 4.8rem;
+      border-radius: 12px;
+      width: auto;
+      max-width: calc(100% - 17.4rem);
+    }
+  }
+  
+  /* ✅ Tablets and small devices */
+  @media (max-width: 768px) {
+    .topMainDash {
+      /* padding: 0.5rem 0.75rem; */
+      flex-direction: row;
+      width: 100vw;
+    }
+  
+    .topGreetH3,
+    .nameDy {
+      font-size: .85rem;
+    }
+  
+    .dashInp {
+      font-size: .75rem;
+    }
+  }
+  
+  /* ✅ Small phones */
+  @media (max-width: 468px) {
+    .topMainDash {
+      padding: 0.5rem 0.5rem;
+    }
+  
+    .dashInp {
+      font-size: .65rem;
+    }
+  
+    .topGreetH3,
+    .nameDy {
+      font-size: .75rem;
+    }
+  
+    .dashSpanInp {
+      height: 4.5vh;
+    }
+  }
+  
+  /* ✅ Very small phones */
+  @media (max-width: 321px) {
+    .topMainDash {
+      padding: 0.5rem 0.3rem;
+    }
+  
+    .dashInp {
+      font-size: .6rem;
+      width: 5.5rem;
+    }
+  
+    .topGreetH3,
+    .nameDy {
+      font-size: .7rem;
+    }
+  
+    .dashSpanInp {
+      padding: .5rem .5rem;
+    }
+  }
+  

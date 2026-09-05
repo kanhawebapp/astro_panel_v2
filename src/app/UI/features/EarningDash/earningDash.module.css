@@ -1,0 +1,253 @@
+.dash-earn-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    background: #e6e6e6;
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    padding: .7rem;
+    justify-content: center;
+    align-items: center;
+}
+.e-card {
+    background: white;
+    box-shadow: 0px 8px 28px -9px rgba(0, 0, 0, 0.45);
+    position: relative;
+    width: 100%;
+    height: 100px;
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+
+/* .wave:nth-child(2),
+.wave:nth-child(3) {
+    top: 720px;
+} */
+
+.playing .wave {
+    border-radius: 40%;
+    animation: wave 4000ms infinite linear;
+}
+
+.wave {
+    border-radius: 40%;
+    animation: wave 40s infinite linear;
+}
+
+.playing .wave:nth-child(2) {
+    animation-duration: 4000ms;
+}
+
+.wave:nth-child(2) {
+    animation-duration: 50s;
+}
+
+.playing .wave:nth-child(3) {
+    animation-duration: 5000ms;
+}
+
+.wave:nth-child(3) {
+    animation-duration: 50s;
+}
+
+@keyframes wave {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+.infotop {
+    padding: 1rem;
+    position: absolute;
+    left: 0;
+    right: 0;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.total-earn {
+    gap: .6rem;
+    font-size: 1.2rem;
+}
+.tot-amt {
+    font-size: 1.5rem;
+}
+.earn-button {
+    padding: .3rem .7rem;
+    font-size: 1.2rem;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+    color: #000;
+
+}
+
+.earn-cards-bx {
+    gap: 2.5rem;
+    padding: 1rem 0;
+}
+.earn-card {
+    width: 250px;
+    height: 100px;
+    padding: 0.5rem .8rem;
+    background-color: #7E60BF;
+    border-radius: 8px;
+    backdrop-filter: blur(5px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.440);
+    border-left: 1px rgba(255, 255, 255, 0.545) outset;
+    box-shadow: -10px 10px 30px rgba(0, 0, 0, 0.280);
+    transform: skewX(0deg);
+    transition: .4s;
+    overflow: hidden;
+    color: white;
+}
+
+.earn-card:hover {
+    background: #855bb1 !important;
+}
+.top-greet-h3 {
+    font-size: 1.2rem;
+    color: #2f1254;
+    font-weight: 600;
+}
+.earn-amt {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+.wave {
+    position: absolute;
+    width: 100%;
+    height: 500px;
+    opacity: 0.6;
+
+    /* margin-left: 20%;
+    margin-top: -70%; */
+    background: linear-gradient(744deg, #af40ff, #5b42f3 60%, #00ddeb);
+}
+
+@media(max-width:870px){
+    .infotop {
+        padding: .5rem;
+        position: absolute;
+        left: 0;
+        right: 0;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .total-earn {
+        gap: .1rem;
+        font-size: .9rem;
+    }
+    .tot-amt {
+        font-size: .9rem;
+    }
+    .earn-button {
+        padding: .1rem .1rem;
+        font-size: 1rem;
+        border-radius: 8px;
+        border: none;
+        outline: none;
+        color: #000;
+    
+    }
+
+
+
+}
+@media(max-width:592px){
+    .infotop {
+        padding: .5rem;
+        position: absolute;
+        left: 0;
+        right: 0;
+        font-weight: 500;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        gap: 2rem;
+    }
+    .total-earn {
+        gap: .1rem;
+        font-size: 1rem;
+    }
+    .tot-amt {
+        font-size: 1rem;
+    }
+    .earn-button {
+        padding: .1rem .1rem;
+        font-size: 1rem;
+        border-radius: 8px;
+        border: none;
+        outline: none;
+        color: #000;
+    
+    }
+.earn-card{
+    flex-direction: column;
+    width: 10rem;
+    height: 5rem;
+}
+.top-greet-h3{
+    font-size: .8rem;
+}
+.earn-amt{
+    font-size: .8rem;
+}
+
+}
+
+@media(max-width:422px){
+    .infotop {
+        /* padding: .5rem; */
+        position: absolute;
+        left: 0;
+        right: 0;
+        font-weight: 500;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        gap: 1rem;
+    }
+    .total-earn {
+        gap: .1rem;
+        font-size: .8rem;
+    }
+    .tot-amt {
+        font-size: .8rem;
+    }
+    .earn-button {
+        /* padding: .1rem .1rem; */
+        font-size: 1rem;
+        border-radius: 8px;
+        border: none;
+        outline: none;
+        color: #000;
+    
+    }
+    .dash-earn-box{
+        margin: 0;
+    }
+    .earn-card{
+        flex-direction: column;
+        width: 8rem;
+        height: 5rem;
+    }
+    .top-greet-h3{
+        font-size: .8rem;
+    }
+    .earn-amt{
+        font-size: .8rem;
+    }
+    
+
+}

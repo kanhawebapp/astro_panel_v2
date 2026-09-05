@@ -1,0 +1,135 @@
+.dash-setting
+ {
+    background: rgba(255, 255, 255, 0.54);
+    /* background: #313030bd; */
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    padding: 10px 20px;
+}
+.wallet-head {
+    font-size: 1rem;
+    background-color: #2f1254;
+    border-radius: 10px;
+    color: #f5c518;
+    padding: .5rem 1rem ;
+    width:fit-content;
+}
+.card-box{
+    padding: 1rem 0;
+    gap: 2rem;
+}
+
+.set-a {
+    text-decoration: none;
+}
+
+.set-a:hover {
+    transform: scale(1.03);
+}
+.set-card-dash {
+    /* width: 200px;
+    height: 120px; */
+    padding: 0.8rem;
+    /* background-color: #2f1254; */
+    border-radius: 8px;
+    /* backdrop-filter: blur(5px); */
+    box-shadow: -10px 10px 30px rgba(0, 0, 0, 0.280);
+  
+    transition: .4s;
+    overflow: hidden;
+    color: white;
+}
+
+.card-h1 {
+    margin: .5rem;
+    /* color: rgb(255, 255, 255); */
+    color: white;
+    text-shadow: -10px 5px 10px rgba(0, 0, 0, 0.573);
+    font-size: 0.92rem;
+    text-align: center;
+    font-weight: 500;
+}
+.set-img {
+    height: 35px;
+    width: 35px;
+    background: #313030bd;
+    border-radius: 8px;
+    transform: scale(1.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.set-img i {
+    font-size: .9rem;
+}
+.update-popup,
+.impnum-popup{
+    display: none;
+    /* Hidden by default */
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgb(0, 0, 0);
+    background-color: rgba(0, 0, 0, 0.6);
+    /* Black w/ opacity */
+}
+
+.update-container,
+.impnum-container {
+    background-color: #fefefe;
+    /* margin: 15% auto; */
+    padding: 0;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 500px;
+    position: relative;
+    top: 4rem;
+    left: 34rem;
+    border-radius: 8px;
+    height: fit-content;
+    overflow: hidden;
+}
+@media(max-width:530px){
+    .dash-setting{
+        margin: 2rem;
+        padding: .2rem;
+    }
+    /* .set-card-dash{ */
+        /* width: 110px; */
+        /* padding: .2rem; */
+        /* height: 90px; */
+    /* } */
+    .set-img {
+        height: 30px;
+        width: 30px;
+        background: #313030bd;
+        border-radius: 8px;
+        transform: scale(1.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .card-box{
+        padding: 1rem ;
+        gap: .9rem;
+    }
+    .card-h1 {
+        margin: .2rem;
+        /* color: rgb(255, 255, 255);
+         */
+        
+        font-size: 0.62rem;
+        text-align: center;
+    }
+}
+@media(max-width:320px){
+    .dash-setting{
+        margin: 0;
+    }
+}

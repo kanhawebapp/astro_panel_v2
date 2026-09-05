@@ -1,0 +1,119 @@
+.cardPanelPermi {
+  background: rgba(255, 255, 255, 0.54);
+
+  box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2),
+    -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+  border-radius: 15px;
+  padding: 10px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  justify-self: center;
+}
+.innerbutton {
+  align-items: center;
+}
+.walletHead {
+  font-size: 1rem;
+  background-color: #2f1254;
+  border-radius: 10px;
+  color: #f5c518;
+  padding: 0.5rem 1rem;
+  width: fit-content;
+}
+.astroMainSer {
+  padding-top: 1rem;
+  gap: 2rem;
+}
+.panelAccessCard {
+  padding: 1rem;
+  gap: 1rem !important;
+  background-color: #7e60bf;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.44);
+  border-left: 0.5px rgba(255, 255, 255, 0.545) outset;
+  border-radius: 8px;
+}
+.panelAccessCard:hover {
+  background: #855bb1 !important;
+}
+.manTop {
+  width: 100vw !important;
+}
+.pAT {
+  gap: 0.5rem;
+}
+.pAType {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: black;
+}
+.topGreet {
+  font-size: 0.88rem;
+  color: #fff;
+}
+.onlineType {
+  border-radius: 5px;
+}
+.bg-success {
+  background-color: green;
+}
+.bg-danger {
+  background-color: red;
+}
+@media (max-width: 1395px) {
+  .astroMainSer {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .cardPanelPermi {
+    margin: 0;
+  }
+  .astroMainSer {
+    justify-content: center;
+  }
+}
+@media (max-width: 520px) {
+  .cardPanelPermi {
+    padding-top: 5px;
+
+    margin: 0;
+  }
+
+  .astroMainSer {
+    padding: 0.3rem 0.3rem;
+    gap: 1rem;
+  }
+  .pAType {
+    font-size: 0.7rem;
+    color: #cfb0f8;
+  }
+  .topGreet {
+    font-size: 0.5rem;
+    color: #fff;
+  }
+}
+@media (max-width: 376px) {
+  .cardPanelPermi {
+    padding-top: 5px;
+    margin: 0;
+  }
+
+  .astroMainSer {
+    padding: 0.3rem 0.3rem;
+    gap: 1rem;
+  }
+  .pAType {
+    font-size: 0.7rem;
+    color: #cfb0f8;
+  }
+  .topGreet {
+    font-size: 0.7rem;
+    color: #fff;
+  }
+  .innerbutton {
+    width: 50px;
+  }
+}

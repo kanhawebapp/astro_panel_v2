@@ -1,0 +1,94 @@
+.astro-follower
+{
+    background: rgba(255, 255, 255, 0.54);
+
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 15px;
+    /* padding: 10px 20px; */
+}
+.wallet-head {
+    font-size: 1rem;
+    background-color: #2f1254;
+    border-radius: 10px;
+    color: #f5c518;
+    padding: .5rem 1rem ;
+    width:fit-content;
+}
+.follower-box {
+    /* gap: 1rem; */
+    padding: 1rem ;
+    width: 100%;
+
+}
+.follow-card {
+    width: 200px;
+    /* height: 200px; */
+    border-radius: 15px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
+    /* Neumorphic shadow */
+    display: flex;
+    padding: 1rem ;
+    justify-content: center;
+    background: linear-gradient(rgb(51, 37, 74),
+            rgba(67, 33, 72, 0.518)),
+        url('/zodiac.png') center/cover no-repeat;
+    background-blend-mode: overlay;
+}
+.follow-card:hover {
+    transform: scale(1.02);
+}
+.f-img {
+    /* padding: .2rem; */
+    background: #242424ec;
+    border-radius: 50%;
+    /* width: 50%; */
+    /* height: 45%; */
+    transform: scale(1.2);
+}
+.f-card-con {
+    background: #ffffff9a;
+    padding: .3rem 1rem;
+    width: 103%;
+    border-radius: 10px;
+}
+.top-fll-h3 {
+    font-size: .9rem;
+
+}
+.f-sm {
+    font-size: .8rem;
+}
+@media(max-width:730px){
+    .astro-follower{
+        margin: 0;
+        /* width: 20rem; */
+    }
+     /* .follower-box{
+        /* flex-direction: column; 
+     /* }  */
+     .follow-card{
+        width: 11rem;
+     }
+    }
+@media(max-width:430px){
+    .astro-follower{
+        margin: 0;
+        /* width: 20rem; */
+    }
+     
+     .follow-card{
+        width: 9rem;
+     }
+   
+    .f-sm {
+        font-size: .6rem;
+    }
+    /* .small{
+        font-size: .6rem;
+    } */
+    .top-fll{
+        font-size: .7rem;
+    }
+}

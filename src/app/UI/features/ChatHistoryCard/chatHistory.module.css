@@ -1,0 +1,204 @@
+/* .callingHis { */
+    /* Add your styles here */
+  /* } */
+
+  .wallet-head {
+    font-size: 1rem;
+    background-color: #2f1254;
+    border-radius: 10px;
+    color: #f5c518;
+    padding: .5rem 1rem ;
+    width:fit-content;
+}
+
+  .cardChat {
+    border: 1px solid #00000018;
+    /* width: 31%; */
+    /* width:1/4; */
+    width: 350px;
+    padding: .5rem;
+    background: #ffffff6e;
+    border-radius: 10px;
+    box-shadow: 3px 3px 10px #ad80d597, -3px -3px 10px #ffffff;
+    gap: .25rem;
+    height: auto;
+  }
+  .cardChatt {
+    border: 1px solid #00000018;
+    /* width: 31%; */
+    /* width:1/4; */
+    width: 350px;
+    padding: .5rem;
+    background: #ffffff6e;
+    border-radius: 10px;
+    box-shadow: 3px 3px 10px #ad80d597, -3px -3px 10px #ffffff;
+    gap: .25rem;
+    height:auto;
+  }
+  
+  .callTop {
+    padding: 0rem .3rem;
+  }
+  
+  .calOdId {
+    gap: .4rem;
+  }
+  
+  .odrSp {
+    font-size: .75rem;
+    color: #7E60BF;
+    font-weight:bold;
+    /* text-decoration: underline; */
+  }
+  
+  .idNm {
+    font-size: .75rem;
+    font-weight: 450;
+  }
+  
+  .flRev {
+     height: 1.8rem;
+     /* font-weight: 400; */
+  }
+  
+.odrDots{
+    font-size: 1.2rem;
+    color: #000;
+}
+
+  .topSpn {
+    padding: .2rem .4rem;
+    color: #fff;
+    background-color: #26202983;
+    border-radius: 8px;
+    font-size: .65rem;
+  }
+  /* .calMidTop{ */
+
+  /* } */
+  .newInd {
+   color: #7E60BF;
+   font-size: .90rem;
+    font-weight: 600;
+  }
+  
+  .newIndOff {
+    font-size: .85rem;
+    font-weight: 500;
+  }
+  
+  .callCardDet {
+    gap: .3rem;
+  }
+  
+  /* .callRate { */
+    /* Add your styles here */
+  /* } */
+  
+  /* .callDr { */
+    /* Add your styles here */
+  /* } */
+  
+  .cardRev {
+    height: 5rem;
+    overflow-y: scroll;
+  }
+  .cardRev::-webkit-scrollbar {
+    width: 5px;
+    border-radius: 15px;
+}
+
+/* Track */
+.cardRev::-webkit-scrollbar-track {
+    background: #f1f1f10a;
+    /* Color of the scrollbar track */
+}
+
+/* Handle */
+.cardRev::-webkit-scrollbar-thumb {
+    background-color: #888;
+    border-radius: 10px;
+    border: 1px solid #f1f1f1;
+}
+
+.cardRev::-webkit-scrollbar-thumb:hover {
+    background-color: #555;
+}
+  .revSpan {
+    font-size: .8rem;
+  }
+  
+  .revAstro {
+    font-size: .8rem;
+  }
+  
+  /* .xtraOp { */
+    /* Add your styles here */
+  /* } */
+  
+  .xtraA {
+    border: 2px solid #ae80d5;
+    border-radius: 7px;
+    padding: .1rem .5rem;
+    background: #e8d0f55f;
+    text-decoration: none;
+    font-size: .7rem;
+    color: #000;
+  }
+  
+  .textSuccess {
+    color: green;
+  }
+  
+  .textDanger {
+    color: red;
+  }
+  
+  .bg-danger {
+    background-color: red;
+  }
+  
+  .bg-opacity-75 {
+    opacity: 0.75;
+  }
+  
+  .text-white {
+    color: white;
+  }
+
+
+  @media (max-width: 1154px) {
+    /* .callingHis {
+      margin: 2rem;
+    } */
+    .cardChat {
+      width: 20rem;
+    }
+    .cardChatt {
+      width: 20rem;
+    }
+  }
+  
+  @media (max-width: 957px) {
+    /* .callingHis {
+      margin: 1rem;
+    } */
+    .cardChat {
+      width: 19rem;
+    }
+    .cardChatt {
+      width: 19rem;
+    }
+  }
+  
+  @media (max-width: 322px) {
+    .callingHis {
+      margin: 5px;
+    }
+    .cardChat {
+      width: 19rem;
+    }
+    .cardChatt {
+      width: 19rem;
+    }
+  }

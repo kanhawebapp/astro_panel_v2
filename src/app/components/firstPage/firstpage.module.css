@@ -1,0 +1,14 @@
+.container{
+    /* margin-left:4rem ;
+    margin-inline-end: 7.5rem; */
+    /* position: relative; */
+}
+
+@media(max-width:1104px){
+    .container{
+        /* /* margin-left:1rem ; */
+    /* margin-inline-end: .2rem; 
+    margin-left: 1rem;
+    margin-right: 1rem; */
+    }
+}

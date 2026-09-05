@@ -1,0 +1,170 @@
+.homeMainCards{
+    gap: 2rem;
+    /* width: 100%; */
+    
+}
+
+.cardMain::-webkit-scrollbar {
+    width: 7px;
+    border-radius: 15px;
+}
+
+/* Track */
+.cardMain::-webkit-scrollbar-track {
+    background: #f1f1f100;
+    /* Color of the scrollbar track */
+}
+
+/* Handle */
+.cardMain::-webkit-scrollbar-thumb {
+    background-color: #888;
+    border-radius: 10px;
+    border: 1px solid #f1f1f1;
+}
+
+.cardMain::-webkit-scrollbar-thumb:hover {
+    background-color: #555;
+}
+
+.cardMain {
+    /* width: 22em; */
+    height: 16.1em;
+    background: #ba8be1;
+    transition: 1s ease-in-out;
+    box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.116);
+    gap: .5rem;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: scroll !important;
+    padding: .7rem 1rem;
+    overflow: hidden;
+}
+
+.cardSp{
+    font-weight: bold;
+    color: #423167;
+    text-align: center;
+    display: block;
+    font-size: .7rem;
+    background: #4a375a4b;
+    padding: .3rem 0rem;
+    border-radius: 10px;
+}
+.cardCharge{
+    gap: .5rem;
+}
+.orgCharge,
+.astroGet {
+    background: rgba(255, 255, 255, 0.54);
+    backdrop-filter: blur(10px);
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    padding: 6px;
+    width: 40%;
+    height: 3.9rem;
+}
+.chargeH{
+    font-size: .65rem;
+}
+
+.charSpIn{
+    font-weight: bold;
+    color: #423167;
+    text-align: center;
+    display: block;
+    font-size: .8rem;
+}
+
+.astroGet{
+    background: rgba(255, 255, 255, 0.54);
+    backdrop-filter: blur(10px);
+    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.2), -8px -8px -8px 16px rgba(255, 255, 255, 0.7);
+    border-radius: 8px;
+    padding: 6px;
+    width: 40%;
+    height: 3.9rem;
+}
+
+
+.poPanel{
+    display: flex;
+    padding: .5rem 0 0 0;
+    justify-content: space-between;
+    flex-direction: column;
+    gap: .4rem;
+}
+.poCall{
+    padding: .3rem;
+    gap: .5rem;
+    background-color: #7e60bf7a;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.440);
+    border-left: .5px rgba(255, 255, 255, 0.545) outset;
+    border-radius: 8px;
+}
+.poSp{
+    gap: .5rem;
+    font-size: .7rem;
+    color: #fff;
+}
+/* .form-check{
+
+} */
+.form-switch{
+    height: 1.3rem;
+    width: 3rem;
+    background-color: rgb(244, 46, 46);
+    background-image: url(/download.svg);
+    cursor: pointer;
+    /* background-color: #30ad17; */
+}
+.cardP{
+    font-size: .7rem;
+}
+.aBtnVw{
+    padding: .2rem .6rem;
+    font-size: .7rem;
+    border-radius: 8px;
+    border: 1px solid #22843c7b;
+    color: #fff;
+}
+.aBtnVw:hover{
+    transform: scale(1.03);
+    }
+
+    @media (max-width: 1104px) { /* Mobile */
+        .homeMainCards{
+            display: flex;
+            justify-content:space-evenly;
+            padding: 0;
+            /* margin-left: 1rem; */
+            /* margin: 0; */
+            /* gap: 2rem; */
+            
+        }
+        .cardMain {
+            width: 20rem;
+             }
+        }    
+    @media (max-width: 768px) {
+        .homeMainCards{
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            /* margin-right: 1rem; */
+            
+        }
+        }    
+    @media (max-width: 322px) {
+        .homeMainCards{
+            display: flex;
+            justify-content: center;
+            padding: 0;
+            /* margin-right: 11rem; */
+            margin-left:auto;
+            
+        }
+        .cardMain {
+            width: 17.5rem;
+        }
+    }

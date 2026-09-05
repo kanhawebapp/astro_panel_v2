@@ -1,0 +1,255 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Orbitron:wght@400..900&family=Patua+One&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+/* * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: "Poppins", sans-serif;
+    font-weight: 400;
+} */
+
+.nbody {
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f5f5f5;
+    font-family: "Poppins", sans-serif;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    /* border-radius: 8px; */
+    overflow: hidden;
+   
+    align-items: center;
+   
+}
+
+.image-container-log {
+    width: 100%;
+    /* background-image: url(./frame.jpg); */
+    background-position: center;
+    background-size: cover;
+    object-fit: cover;
+    background-repeat: no-repeat;
+}
+
+.image-container-log img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.loginContainer {
+    width: 30%;
+    padding: 40px;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2rem;
+    border-radius: 30px;
+    margin-top: 4rem;
+}
+
+.loginContainer .log-log h2 {
+    margin-bottom: 5px;
+    font-size: 20px;
+    color: #333;
+}
+.loginContainer .log-log span{
+    font-size: .9rem;
+}
+.loginContainer .log-log{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.loginContainer form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.loginContainer label {
+    margin-bottom: 10px;
+    font-weight: 500;
+    color: #555;
+}
+
+.loginContainer input {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 35px;
+}
+.loginContainer input::placeholder{
+    font-size: .7rem;
+    color: grey;
+}
+.loginContainer .log-logo{
+height: 4rem;   
+padding: .5rem; 
+background-color: #2f12547a;
+border-radius: 8px;}
+
+.loginContainer button {
+    padding: 10px;
+    background-color: #2f1254;
+    color: #efb80b;    border: none;
+    border-radius: 35px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.loginContainer button:hover {
+    background-color: #efb80b;
+   color: #2f1254;
+
+}
+
+/* new Astrologer Login  */
+.login_main{
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+gap: 2rem;
+}
+.header{
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center ;
+    width: 80%;
+}
+.headerInner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    padding: 10px 30px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(20px);
+    box-shadow: inset 3px 3px 10px #371c57, inset -3px -3px 10px #5e307d;
+    background-color: #2f1254;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.mobileHeader{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.navLinks {
+    display: flex;
+    gap: 20px;
+    position: relative;
+    overflow: visible;
+    align-items: center;
+    justify-content: center;
+}
+.profile{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    text-decoration: none;
+}
+.signInText{
+    color: #fff;
+    font-size: 1rem;
+}
+.footer{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    padding: .5rem 1rem;
+    border-top: .5px rgba(255, 255, 255, 0.545) outset;
+    background: #2f1254;
+    margin-top:60px;
+    width: 100%;
+    /* margin-bottom:1px; */
+    margin-bottom: 0%;
+}
+.footerList{
+    display: flex;
+    list-style-type: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;  
+    color:white; 
+    margin: .5rem; 
+}
+.dash-f-a-log{
+    color: #fff;
+    text-decoration: none;
+    font-weight: 200;
+}
+.footerText{
+    color: #fff;
+    font-size: .8rem;
+    font-weight: 200;
+}
+.loginBox{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+.socialIcons{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap:1rem;
+}
+.socialIcons img{
+width: 2.5rem;
+height: 2.5rem;
+border-radius: 50%;
+}
+@media(max-width:1024px){
+    .loginContainer{
+        width:42%;
+    }
+}
+
+@media(max-width:768px){
+    .loginContainer{
+        width:50%;
+    }
+    .header{
+        width: 80%;
+        padding: 2px;
+    }
+}
+@media(max-width:468px){
+    .loginContainer{
+        width:80%;
+    }
+    .header{
+        width: 99%;
+        padding: 2px;
+    }
+}
+@media(max-width:320px){
+    .loginContainer{
+        width:95%;
+    }
+    .header{
+        width: 99%;
+        padding: 2px;
+    }
+}
