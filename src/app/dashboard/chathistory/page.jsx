@@ -348,16 +348,17 @@ export default function AstrologerChatHistory() {
                         <Eye size={16} />
                         Chat
                       </button>
-                    </>
-                  )}
-
-                  <button
+                         <button
                     onClick={() => getKundli(chat.roomId)}
                     className="bg-purple-600 text-white rounded-xl py-2 text-xs flex items-center justify-center gap-2 hover:bg-purple-700"
-                  >
+                   >
                     <FileText size={16} />
                     Kundli
                   </button>
+                    </>
+                  )}
+
+               
                 </div>
               </div>
             </div>

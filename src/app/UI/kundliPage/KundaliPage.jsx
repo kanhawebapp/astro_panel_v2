@@ -176,7 +176,7 @@ export default function KundaliPage({ roomId }) {
   return (
     <div className="w-full mx-auto space-y-8">
       <header>
-        <h2 className="wallet-head mx-auto text-center">Kundali Pageqqqqqqqqq</h2>
+        <h2 className="wallet-head mx-auto text-center">Kundali Page</h2>
         {/* <p className="text-bold text-gray-900">
           Order ID: {requestSessionId}
         </p>{" "} */}
