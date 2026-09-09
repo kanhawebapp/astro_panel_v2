@@ -48,7 +48,7 @@ export default function AstrologerChatHistory() {
 
   const getKundli = (roomId) => {
     console.log("roomId in getKundli functionxxxxxxxxxxxxxxxxxxxxxx", roomId);
-    router.push(`/dashboard/chathistory/kundli/${roomId}`);
+    router.push(`/UI/chathistory/kundli/${roomId}`);
   };
 
   const { data, loading, error } = useQuery(GET_ASTROLOGER_CHAT_HISTORY, {
