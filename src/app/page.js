@@ -49,8 +49,7 @@ export default function LoginForm() {
   const [requestOtp] = useMutation(REQUEST_OTP);
   const [verifyOtp] = useMutation(VERIFY_OTP);
 
-  const getOtpBtnRef = useRef(null);
-  const verifyBtnRef = useRef(null);
+
 
   const [otpSent, setOtpSent] = useState(1);
   const [otp, setOtp] = useState(["", "", "", ""]);
@@ -59,6 +58,7 @@ export default function LoginForm() {
     e164: "",
     isValid: false,
   });
+  
 
   // ================= SEND OTP =================
 
@@ -131,7 +131,25 @@ const handleVerifyOTP = async () => {
     const val = e.target.value.replace(/\D/, "");
     if (!val) return;
 
-    const updated = [...otp];
+    const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  if (otpSent === 1) {
+    await handleGetOTP();
+    return;
+  }
+
+  if (otpSent === 2) {
+    const enteredOtp = otp.join("");
+
+    if (enteredOtp.length !== 4) {
+      toast.error("Please enter complete OTP");
+      return;
+    }
+
+    await handleVerifyOTP();
+  }
+};const updated = [...otp];
     updated[i] = val;
     setOtp(updated);
 
@@ -168,69 +186,64 @@ const handleVerifyOTP = async () => {
             className={styles.logoImage}
           />
         </div>
+<form onSubmit={handleSubmit}>
+  {otpSent === 1 && (
+    <>
+      <h2 className="text-2xl font-bold text-white mb-2">
+        Astrologer Login
+      </h2>
 
-        {otpSent === 1 && (
-          <>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              Astrologer Login
-            </h2>
-            <p className="text-gray-400 mb-6">
-              Enter your number to receive OTP
-            </p>
+      <p className="text-gray-400 mb-6">
+        Enter your number to receive OTP
+      </p>
 
-            <div className="flex flex-col gap-5 items-center">
-              <PhoneInput onChange={setPhoneData} />
+      <div className="flex flex-col gap-5 items-center">
+        <PhoneInput onChange={setPhoneData} />
 
-              <button
-                onClick={handleGetOTP}
-                className="w-[50%] py-3 rounded-full font-semibold text-white  cursor-pointer
-              bg-gradient-to-r from-purple-600 to-violet-500
-              hover:scale-[1.03] transition-all duration-200
-              shadow-[0_0_20px_rgba(168,85,247,0.6)]
-              active:scale-[0.98]"
-              >
-                Send OTP
-              </button>
-            </div>
-          </>
-        )}
+        <button
+          type="submit"
+          className="w-[50%] py-3 rounded-full font-semibold text-white cursor-pointer bg-gradient-to-r from-purple-600 to-violet-500 hover:scale-[1.03] transition-all duration-200 shadow-[0_0_20px_rgba(168,85,247,0.6)] active:scale-[0.98]"
+        >
+          Send OTP
+        </button>
+      </div>
+    </>
+  )}
 
-        {otpSent === 2 && (
-          <>
-            <h3 className="text-xl font-semibold text-white mb-2">
-              Verify OTP
-            </h3>
-            <p className="text-gray-400 mb-4">Sent to {phoneData.e164}</p>
+  {otpSent === 2 && (
+    <>
+      <h3 className="text-xl font-semibold text-white mb-2">
+        Verify OTP
+      </h3>
 
-            <div className="flex justify-center gap-3 mb-6">
-              {otp.map((digit, i) => (
-                <input
-                  key={i}
-                  id={`otp-${i}`}
-                  value={digit}
-                  maxLength={1}
-                  onChange={(e) => handleChange(e, i)}
-                  onKeyDown={(e) => handleBackspace(e, i)}
-                  className="w-12 h-12 text-lg text-center rounded-xl 
-                bg-white/10 text-white border border-white/20
-                focus:ring-2 focus:ring-purple-500 outline-none
-                shadow-inner"
-                />
-              ))}
-            </div>
+      <p className="text-gray-400 mb-4">
+        Sent to {phoneData.e164}
+      </p>
 
-            <button
-              onClick={handleVerifyOTP}
-              className="w-full py-3 rounded-xl font-semibold text-white 
-            bg-gradient-to-r from-purple-600 to-blue-500
-            hover:scale-[1.03] transition-all duration-200
-            shadow-[0_0_20px_rgba(168,85,247,0.6)]
-            active:scale-[0.98]"
-            >
-              Verify OTP
-            </button>
-          </>
-        )}
+      <div className="flex justify-center gap-3 mb-6">
+        {otp.map((digit, i) => (
+          <input
+            key={i}
+            id={`otp-${i}`}
+            value={digit}
+            maxLength={1}
+            inputMode="numeric"
+            onChange={(e) => handleChange(e, i)}
+            onKeyDown={(e) => handleBackspace(e, i)}
+            className="w-12 h-12 text-lg text-center rounded-xl bg-white/10 text-white border border-white/20 focus:ring-2 focus:ring-purple-500 outline-none shadow-inner"
+          />
+        ))}
+      </div>
+
+      <button
+        type="submit"
+        className="w-full py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-500 hover:scale-[1.03] transition-all duration-200 shadow-[0_0_20px_rgba(168,85,247,0.6)] active:scale-[0.98]"
+      >
+        Verify OTP
+      </button>
+    </>
+  )}
+</form>
 
         <p className="text-xs text-gray-400 mt-6">
           Secure Astrologer Access • Dhwani Astro
