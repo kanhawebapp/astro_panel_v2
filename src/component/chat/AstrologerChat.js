@@ -790,7 +790,7 @@ const AstrologerChat = () => {
     });
 
     window.open(
-      `https://dhwani-astro-v2.vercel.app/freeservices/kundali/getKundaliPage?${params.toString()}`,
+      `https://dhwani-astro-website-v2.vercel.app/freeservices/kundali/getKundaliPage?${params.toString()}`,
       "_blank",
     );
   };
