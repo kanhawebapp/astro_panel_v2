@@ -357,8 +357,6 @@ const AstrologerChat = () => {
   };
 
   useEffect(() => {
-  console.log("REMEDY DATA", remedyData);
-  console.log("REMEDY ERROR", remedyError);
 }, [remedyData, remedyError]);
 
   const [endTime, setEndTime] = useState(getEndTime());
@@ -591,11 +589,7 @@ const AstrologerChat = () => {
       user_name: "Astrologer",
     });
 
-    console.log("⌨️ TYPING FALSE - EMPTY MESSAGE", {
-      room_id: roomId,
-      typing: false,
-      user_name: "Astrologer",
-    });
+    
 
     return;
   }
@@ -609,12 +603,7 @@ const AstrologerChat = () => {
     user_name: "Astrologer",
   });
 
-  console.log("⌨️ TYPING TRUE", {
-    room_id: roomId,
-    typing: true,
-    user_name: "Astrologer",
-    messageLength: value.length,
-  });
+ 
 
   // -----------------------------------------
   // Stop typing after 2 seconds
@@ -626,11 +615,7 @@ const AstrologerChat = () => {
       user_name: "Astrologer",
     });
 
-    console.log("⌨️ TYPING FALSE - TIMEOUT", {
-      room_id: roomId,
-      typing: false,
-      user_name: "Astrologer",
-    });
+    
 
     typingTimeoutRef.current = null;
   }, 2000);
@@ -649,9 +634,6 @@ const AstrologerChat = () => {
     try {
       // Upload image first
       if (imageFile) {
-        console.log(imageFile);
-        console.log(imageFile instanceof File);
-        console.log(imageFile.constructor.name);
         const { data } = await uploadFile({
           variables: {
             file: imageFile,
@@ -735,7 +717,6 @@ const AstrologerChat = () => {
 
       setImagePreview(URL.createObjectURL(compressedImage));
 
-      console.log(compressedFile instanceof File);
 
       if (messageInputRef.current) {
         messageInputRef.current.focus();
