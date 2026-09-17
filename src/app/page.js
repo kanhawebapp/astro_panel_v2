@@ -238,6 +238,25 @@ export default function LoginForm() {
           )}
         </form>
 
+
+<p className="text-xs text-gray-400 mt-6 text-center leading-relaxed">
+  By signing in, you agree to our{" "}
+  <Link
+    href="https://dhwaniastro.com/astrologer/terms-and-conditions"
+    className="text-gray-300 hover:text-white underline underline-offset-2 transition-colors"
+  >
+    Terms & Conditions
+  </Link>{" "}
+  and{" "}
+  <Link
+    href="https://dhwaniastro.com/astrologer/privacy-policy"
+    className="text-gray-300 hover:text-white underline underline-offset-2 transition-colors"
+  >
+    Privacy Policy
+  </Link>
+  .
+</p>
+
         <p className="text-xs text-gray-400 mt-6">
           Secure Astrologer Access • Dhwani Astro
         </p>
