@@ -243,6 +243,8 @@ export default function LoginForm() {
   By signing in, you agree to our{" "}
   <Link
     href="https://dhwaniastro.com/astrologer/terms-and-conditions"
+    target="_blank"
+    rel="noopener noreferrer"
     className="text-gray-300 hover:text-white underline underline-offset-2 transition-colors"
   >
     Terms & Conditions
@@ -250,6 +252,8 @@ export default function LoginForm() {
   and{" "}
   <Link
     href="https://dhwaniastro.com/astrologer/privacy-policy"
+    target="_blank"
+    rel="noopener noreferrer"
     className="text-gray-300 hover:text-white underline underline-offset-2 transition-colors"
   >
     Privacy Policy
