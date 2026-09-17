@@ -771,7 +771,7 @@ const AstrologerChat = () => {
     });
 
     window.open(
-      `https://dhwaniastro.com/freeservices/kundali/getKundaliPage?${params.toString()}`,
+      `${process.env.NEXT_PUBLIC_BASE_URL}/freeservices/kundali/getKundaliPage?${params.toString()}`,
       "_blank",
     );
   };

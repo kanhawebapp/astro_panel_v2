@@ -4,7 +4,6 @@ import {
   ApolloClient,
   InMemoryCache,
   from,
-  makeVar,
 } from "@apollo/client";
 
 import { onError } from "@apollo/client/link/error";
@@ -12,9 +11,17 @@ import { Observable } from "@apollo/client/utilities";
 import UploadHttpLink from "apollo-upload-client/UploadHttpLink.mjs";
 import { CombinedGraphQLErrors } from "@apollo/client/errors";
 
+// ------------------------------------------------
+// GraphQL URL
+// ------------------------------------------------
 
+const GRAPHQL_URL = process.env.NEXT_PUBLIC_GRAPHQL_URL;
 
-const GRAPHQL_URL = "https://dhwaniastro.com/astroAuth/graphql";
+if (!GRAPHQL_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_GRAPHQL_URL is not defined"
+  );
+}
 
 // ------------------------------------------------
 // Upload Link
@@ -27,12 +34,6 @@ const uploadLink = new UploadHttpLink({
     "Apollo-Require-Preflight": "true",
   },
 });
-
-// ------------------------------------------------
-// Authorization Header
-// ------------------------------------------------
-
-
 
 // ------------------------------------------------
 // Refresh Mutation
@@ -94,13 +95,13 @@ const errorLink = onError(({ error, operation, forward }) => {
   console.log("Need Refresh");
 
   return new Observable((observer) => {
-   const retry = () => {
-  forward(operation).subscribe({
-    next: (value) => observer.next(value),
-    error: (err) => observer.error(err),
-    complete: () => observer.complete(),
-  });
-};
+    const retry = () => {
+      forward(operation).subscribe({
+        next: (value) => observer.next(value),
+        error: (err) => observer.error(err),
+        complete: () => observer.complete(),
+      });
+    };
 
     if (!isRefreshing) {
       isRefreshing = true;
@@ -136,6 +137,7 @@ const errorLink = onError(({ error, operation, forward }) => {
     }
   });
 });
+
 // ------------------------------------------------
 // Apollo Client
 // ------------------------------------------------

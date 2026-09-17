@@ -11,7 +11,7 @@ export const metadata = {
   openGraph: {
     title: "Login - Dhwani Astro",
     description: "Securely log in to your Dhwani Astro account.",
-    url: "https://astro.dhwaniastro.com/",
+    url: "https://astropanel.dhwaniastro.com/",
     siteName: "Dhwani Astro",
     images: [
       {
