@@ -33,7 +33,7 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
         service {
           id
           name
-          price
+          
         }
 
         amount
@@ -242,11 +242,7 @@ export default function AstrologerAssignedServices() {
                         {item.service?.name || "-"}
                       </div>
 
-                      {item.service?.price != null && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Service Price: ₹{item.service.price}
-                        </div>
-                      )}
+                     
 
                     </td>
 
