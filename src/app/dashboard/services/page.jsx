@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useMemo, useState } from "react";
@@ -10,10 +11,14 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
   query GetAstrologerAssignedBookedServices(
     $page: Int!
     $limit: Int!
+    $bookingStatus: String
+    $paymentStatus: String
   ) {
     getAstrologerAssignedBookedServices(
       page: $page
       limit: $limit
+      bookingStatus: $bookingStatus
+      paymentStatus: $paymentStatus
     ) {
       success
       total
@@ -24,6 +29,8 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
       data {
         id
         name
+        email
+        phone
         dob
         tob
         pob
@@ -46,7 +53,6 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
 
 export default function AstrologerAssignedServices() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
 
   const limit = 20;
@@ -57,40 +63,54 @@ export default function AstrologerAssignedServices() {
       variables: {
         page,
         limit,
+
+        // Only get successfully paid bookings
+        paymentStatus: "SUCCESS",
+
+        // Only get bookings assigned to this astrologer
+        bookingStatus: "ASSIGNED",
       },
       fetchPolicy: "network-only",
     },
   );
 
- const response =
-  data?.getAstrologerAssignedBookedServices;
+  const response = data?.getAstrologerAssignedBookedServices;
 
-const services = response?.data || [];
+  const services = response?.data || [];
 
-const total = response?.total || 0;
+  const total = response?.total || 0;
 
-const totalPages = response?.totalPages || 1;
+  const totalPages = response?.totalPages || 1;
 
-const currentPage = response?.currentPage || 1;
+  const currentPage = response?.currentPage || 1;
 
+  /*
+   * Search is performed only on the records already returned
+   * by the backend.
+   */
   const filteredServices = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return services;
+    }
+
     return services.filter((item) => {
-      const query = search.toLowerCase();
-
-      const matchesSearch =
+      return (
         item?.name?.toLowerCase().includes(query) ||
-        item?.service?.name?.toLowerCase().includes(query);
-
-      const matchesStatus =
-        statusFilter === "ALL" || item.bookingStatus === statusFilter;
-
-      return matchesSearch && matchesStatus;
+        item?.email?.toLowerCase().includes(query) ||
+        item?.phone?.toLowerCase().includes(query) ||
+        item?.service?.name?.toLowerCase().includes(query) ||
+        item?.concern?.toLowerCase().includes(query)
+      );
     });
-  }, [services, search, statusFilter]);
+  }, [services, search]);
 
   if (error) {
     return (
-      <div className="p-6 text-red-500">Error loading assigned services</div>
+      <div className="p-6 text-red-500">
+        Error loading assigned services: {error.message}
+      </div>
     );
   }
 
@@ -103,81 +123,73 @@ const currentPage = response?.currentPage || 1;
         </h1>
 
         <p className="text-gray-500 mt-1">
-          View all healing services assigned to you
+          View successfully paid services assigned to you
         </p>
       </div>
 
       {/* SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* TOTAL ASSIGNED */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
           <h3 className="text-gray-500 text-sm">Total Assigned</h3>
 
           <h2 className="text-3xl font-bold mt-2">
-            {data?.getAstrologerAssignedBookedServices?.total}
+            {total}
           </h2>
         </div>
 
+        {/* SUCCESSFUL PAYMENTS */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
-          <h3 className="text-gray-500 text-sm">Completed</h3>
+          <h3 className="text-gray-500 text-sm">Successful Payments</h3>
 
           <h2 className="text-3xl font-bold mt-2">
-            {services.filter((s) => s.bookingStatus === "COMPLETED").length}
+            {services.filter(
+              (s) => s.paymentStatus === "SUCCESS",
+            ).length}
           </h2>
         </div>
 
+        {/* ASSIGNED */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
-          <h3 className="text-gray-500 text-sm">Pending</h3>
+          <h3 className="text-gray-500 text-sm">Assigned</h3>
 
           <h2 className="text-3xl font-bold mt-2">
-            {services.filter((s) => s.bookingStatus === "PENDING").length}
+            {services.filter(
+              (s) => s.bookingStatus === "ASSIGNED",
+            ).length}
           </h2>
         </div>
       </div>
 
-      {/* SEARCH + FILTER */}
+      {/* SEARCH */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 mb-5">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+        <div className="relative">
+          <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
 
-            <input
-              type="text"
-              placeholder="Search by name, service..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              className="w-full border rounded-xl pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-black"
-            />
-          </div>
-
-          <select
-            value={statusFilter}
+          <input
+            type="text"
+            placeholder="Search by name, email, phone, service..."
+            value={search}
             onChange={(e) => {
-              setStatusFilter(e.target.value);
+              setSearch(e.target.value);
               setPage(1);
             }}
-            className="border rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-black"
-          >
-            <option value="ALL">All Status</option>
-
-            <option value="PENDING">Pending</option>
-
-            <option value="COMPLETED">Completed</option>
-
-            <option value="CANCELLED">Cancelled</option>
-          </select>
+            className="w-full border rounded-xl pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-black"
+          />
         </div>
       </div>
 
       {/* TABLE */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1400px]">
+          <table className="w-full min-w-[1500px]">
             <thead className="bg-gray-100">
               <tr>
                 <th className="p-4 text-left">Customer</th>
+
+                <th className="p-4 text-left">Email</th>
+
+                <th className="p-4 text-left">Phone</th>
 
                 <th className="p-4 text-left">Service</th>
 
@@ -202,38 +214,67 @@ const currentPage = response?.currentPage || 1;
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-10">
-                    Loading services...
+                  <td
+                    colSpan={12}
+                    className="text-center py-10"
+                  >
+                    Loading assigned services...
                   </td>
                 </tr>
               ) : filteredServices.length > 0 ? (
                 filteredServices.map((item) => (
-                  <tr key={item.id} className="border-t hover:bg-gray-50">
+                  <tr
+                    key={item.id}
+                    className="border-t hover:bg-gray-50"
+                  >
                     {/* CUSTOMER */}
                     <td className="p-4">
-                      <div className="font-semibold">{item.name}</div>
+                      <div className="font-semibold">
+                        {item.name}
+                      </div>
+                    </td>
+
+                    {/* EMAIL */}
+                    <td className="p-4">
+                      {item.email}
+                    </td>
+
+                    {/* PHONE */}
+                    <td className="p-4">
+                      {item.phone}
                     </td>
 
                     {/* SERVICE */}
                     <td className="p-4">
-                      <div className="font-medium">{item.service?.name}</div>
+                      <div className="font-medium">
+                        {item.service?.name || "-"}
+                      </div>
                     </td>
 
                     {/* DOB */}
                     <td className="p-4">
                       {item.dob}
                       <br />
-                      <span className="text-xs text-gray-500">{item.tob}</span>
+
+                      <span className="text-xs text-gray-500">
+                        {item.tob}
+                      </span>
                     </td>
 
                     {/* POB */}
-                    <td className="p-4">{item.pob}</td>
+                    <td className="p-4">
+                      {item.pob}
+                    </td>
 
                     {/* GENDER */}
-                    <td className="p-4">{item.gender}</td>
+                    <td className="p-4">
+                      {item.gender}
+                    </td>
 
                     {/* AMOUNT */}
-                    <td className="p-4 font-semibold">₹{item.amount}</td>
+                    <td className="p-4 font-semibold">
+                      ₹{item.amount}
+                    </td>
 
                     {/* PAYMENT */}
                     <td className="p-4">
@@ -252,9 +293,9 @@ const currentPage = response?.currentPage || 1;
                     <td className="p-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.bookingStatus === "COMPLETED"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
+                          item.bookingStatus === "ASSIGNED"
+                            ? "bg-blue-100 text-blue-700"
+                            : "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {item.bookingStatus}
@@ -263,86 +304,105 @@ const currentPage = response?.currentPage || 1;
 
                     {/* CONCERN */}
                     <td className="p-4 max-w-xs">
-                      <div className="line-clamp-2">{item.concern}</div>
+                      <div className="line-clamp-2">
+                        {item.concern}
+                      </div>
                     </td>
-
 
                     {/* DATE */}
                     <td className="p-4 text-sm text-gray-500">
-                     {new Date(Number(item.createdAt)).toLocaleString("en-IN")}
+                      {new Date(
+                        Number(item.createdAt),
+                      ).toLocaleString("en-IN")}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={10} className="text-center py-10 text-gray-500">
+                  <td
+                    colSpan={12}
+                    className="text-center py-10 text-gray-500"
+                  >
                     No assigned services found
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-         <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t bg-white">
-  <div className="text-sm text-gray-600">
-    Showing page {currentPage} of {totalPages}
-    <span className="ml-2 text-gray-400">
-      ({total} records)
-    </span>
-  </div>
 
-  <div className="flex items-center gap-2">
-    <button
-      disabled={currentPage === 1 || loading}
-      onClick={() => setPage((prev) => prev - 1)}
-      className={`px-4 py-2 rounded-lg border transition ${
-        currentPage === 1
-          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-          : "bg-white hover:bg-gray-50"
-      }`}
-    >
-      Previous
-    </button>
+          {/* PAGINATION */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t bg-white">
+            <div className="text-sm text-gray-600">
+              Showing page {currentPage} of {totalPages}
 
-    {Array.from(
-      { length: totalPages },
-      (_, i) => i + 1
-    )
-      .slice(
-        Math.max(0, currentPage - 3),
-        Math.min(totalPages, currentPage + 2)
-      )
-      .map((pageNumber) => (
-        <button
-          key={pageNumber}
-          onClick={() => setPage(pageNumber)}
-          disabled={loading}
-          className={`w-10 h-10 rounded-lg border transition ${
-            currentPage === pageNumber
-              ? "bg-black text-white"
-              : "bg-white hover:bg-gray-50"
-          }`}
-        >
-          {pageNumber}
-        </button>
-      ))}
+              <span className="ml-2 text-gray-400">
+                ({total} records)
+              </span>
+            </div>
 
-    <button
-      disabled={
-        currentPage >= totalPages || loading
-      }
-      onClick={() => setPage((prev) => prev + 1)}
-      className={`px-4 py-2 rounded-lg border transition ${
-        currentPage >= totalPages
-          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-          : "bg-white hover:bg-gray-50"
-      }`}
-    >
-      Next
-    </button>
-  </div>
-</div>
+            <div className="flex items-center gap-2">
+              {/* PREVIOUS */}
+              <button
+                disabled={currentPage === 1 || loading}
+                onClick={() =>
+                  setPage((prev) => prev - 1)
+                }
+                className={`px-4 py-2 rounded-lg border transition ${
+                  currentPage === 1
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white hover:bg-gray-50"
+                }`}
+              >
+                Previous
+              </button>
+
+              {/* PAGE NUMBERS */}
+              {Array.from(
+                { length: totalPages },
+                (_, i) => i + 1,
+              )
+                .slice(
+                  Math.max(0, currentPage - 3),
+                  Math.min(totalPages, currentPage + 2),
+                )
+                .map((pageNumber) => (
+                  <button
+                    key={pageNumber}
+                    onClick={() =>
+                      setPage(pageNumber)
+                    }
+                    disabled={loading}
+                    className={`w-10 h-10 rounded-lg border transition ${
+                      currentPage === pageNumber
+                        ? "bg-black text-white"
+                        : "bg-white hover:bg-gray-50"
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+
+              {/* NEXT */}
+              <button
+                disabled={
+                  currentPage >= totalPages || loading
+                }
+                onClick={() =>
+                  setPage((prev) => prev + 1)
+                }
+                className={`px-4 py-2 rounded-lg border transition ${
+                  currentPage >= totalPages
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-white hover:bg-gray-50"
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
