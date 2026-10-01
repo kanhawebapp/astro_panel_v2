@@ -11,8 +11,8 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
   query GetAstrologerAssignedBookedServices(
     $page: Int!
     $limit: Int!
-    $bookingStatus: String
-    $paymentStatus: String
+    $bookingStatus: BookingStatus
+    $paymentStatus: PaymentStatus
   ) {
     getAstrologerAssignedBookedServices(
       page: $page
@@ -29,8 +29,6 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
       data {
         id
         name
-        email
-        phone
         dob
         tob
         pob
@@ -64,12 +62,13 @@ export default function AstrologerAssignedServices() {
         page,
         limit,
 
-        // Only get successfully paid bookings
+        // Only successfully paid bookings
         paymentStatus: "SUCCESS",
 
-        // Only get bookings assigned to this astrologer
+        // Only bookings assigned to this astrologer
         bookingStatus: "ASSIGNED",
       },
+
       fetchPolicy: "network-only",
     },
   );
@@ -85,7 +84,7 @@ export default function AstrologerAssignedServices() {
   const currentPage = response?.currentPage || 1;
 
   /*
-   * Search is performed only on the records already returned
+   * Search is performed on the records returned
    * by the backend.
    */
   const filteredServices = useMemo(() => {
@@ -98,10 +97,9 @@ export default function AstrologerAssignedServices() {
     return services.filter((item) => {
       return (
         item?.name?.toLowerCase().includes(query) ||
-        item?.email?.toLowerCase().includes(query) ||
-        item?.phone?.toLowerCase().includes(query) ||
         item?.service?.name?.toLowerCase().includes(query) ||
-        item?.concern?.toLowerCase().includes(query)
+        item?.concern?.toLowerCase().includes(query) ||
+        item?.pob?.toLowerCase().includes(query)
       );
     });
   }, [services, search]);
@@ -131,7 +129,9 @@ export default function AstrologerAssignedServices() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* TOTAL ASSIGNED */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
-          <h3 className="text-gray-500 text-sm">Total Assigned</h3>
+          <h3 className="text-gray-500 text-sm">
+            Total Assigned
+          </h3>
 
           <h2 className="text-3xl font-bold mt-2">
             {total}
@@ -140,7 +140,9 @@ export default function AstrologerAssignedServices() {
 
         {/* SUCCESSFUL PAYMENTS */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
-          <h3 className="text-gray-500 text-sm">Successful Payments</h3>
+          <h3 className="text-gray-500 text-sm">
+            Successful Payments
+          </h3>
 
           <h2 className="text-3xl font-bold mt-2">
             {services.filter(
@@ -151,7 +153,9 @@ export default function AstrologerAssignedServices() {
 
         {/* ASSIGNED */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
-          <h3 className="text-gray-500 text-sm">Assigned</h3>
+          <h3 className="text-gray-500 text-sm">
+            Assigned
+          </h3>
 
           <h2 className="text-3xl font-bold mt-2">
             {services.filter(
@@ -168,7 +172,7 @@ export default function AstrologerAssignedServices() {
 
           <input
             type="text"
-            placeholder="Search by name, email, phone, service..."
+            placeholder="Search by name, service, concern, place..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -182,32 +186,48 @@ export default function AstrologerAssignedServices() {
       {/* TABLE */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1500px]">
+          <table className="w-full min-w-[1400px]">
             <thead className="bg-gray-100">
               <tr>
-                <th className="p-4 text-left">Customer</th>
+                <th className="p-4 text-left">
+                  Customer
+                </th>
 
-                <th className="p-4 text-left">Email</th>
+                <th className="p-4 text-left">
+                  Service
+                </th>
 
-                <th className="p-4 text-left">Phone</th>
+                <th className="p-4 text-left">
+                  DOB / TOB
+                </th>
 
-                <th className="p-4 text-left">Service</th>
+                <th className="p-4 text-left">
+                  Birth Place
+                </th>
 
-                <th className="p-4 text-left">DOB</th>
+                <th className="p-4 text-left">
+                  Gender
+                </th>
 
-                <th className="p-4 text-left">Birth Place</th>
+                <th className="p-4 text-left">
+                  Amount
+                </th>
 
-                <th className="p-4 text-left">Gender</th>
+                <th className="p-4 text-left">
+                  Payment
+                </th>
 
-                <th className="p-4 text-left">Amount</th>
+                <th className="p-4 text-left">
+                  Booking
+                </th>
 
-                <th className="p-4 text-left">Payment</th>
+                <th className="p-4 text-left">
+                  Concern
+                </th>
 
-                <th className="p-4 text-left">Booking</th>
-
-                <th className="p-4 text-left">Concern</th>
-
-                <th className="p-4 text-left">Date</th>
+                <th className="p-4 text-left">
+                  Date
+                </th>
               </tr>
             </thead>
 
@@ -215,7 +235,7 @@ export default function AstrologerAssignedServices() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={10}
                     className="text-center py-10"
                   >
                     Loading assigned services...
@@ -230,18 +250,8 @@ export default function AstrologerAssignedServices() {
                     {/* CUSTOMER */}
                     <td className="p-4">
                       <div className="font-semibold">
-                        {item.name}
+                        {item.name || "-"}
                       </div>
-                    </td>
-
-                    {/* EMAIL */}
-                    <td className="p-4">
-                      {item.email}
-                    </td>
-
-                    {/* PHONE */}
-                    <td className="p-4">
-                      {item.phone}
                     </td>
 
                     {/* SERVICE */}
@@ -249,31 +259,38 @@ export default function AstrologerAssignedServices() {
                       <div className="font-medium">
                         {item.service?.name || "-"}
                       </div>
+
+                      {item.service?.price != null && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          ₹{item.service.price}
+                        </div>
+                      )}
                     </td>
 
-                    {/* DOB */}
+                    {/* DOB / TOB */}
                     <td className="p-4">
-                      {item.dob}
-                      <br />
+                      <div>
+                        {item.dob || "-"}
+                      </div>
 
                       <span className="text-xs text-gray-500">
-                        {item.tob}
+                        {item.tob || "-"}
                       </span>
                     </td>
 
                     {/* POB */}
                     <td className="p-4">
-                      {item.pob}
+                      {item.pob || "-"}
                     </td>
 
                     {/* GENDER */}
                     <td className="p-4">
-                      {item.gender}
+                      {item.gender || "-"}
                     </td>
 
                     {/* AMOUNT */}
                     <td className="p-4 font-semibold">
-                      ₹{item.amount}
+                      ₹{item.amount ?? 0}
                     </td>
 
                     {/* PAYMENT */}
@@ -305,22 +322,24 @@ export default function AstrologerAssignedServices() {
                     {/* CONCERN */}
                     <td className="p-4 max-w-xs">
                       <div className="line-clamp-2">
-                        {item.concern}
+                        {item.concern || "-"}
                       </div>
                     </td>
 
                     {/* DATE */}
                     <td className="p-4 text-sm text-gray-500">
-                      {new Date(
-                        Number(item.createdAt),
-                      ).toLocaleString("en-IN")}
+                      {item.createdAt
+                        ? new Date(
+                            Number(item.createdAt),
+                          ).toLocaleString("en-IN")
+                        : "-"}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={10}
                     className="text-center py-10 text-gray-500"
                   >
                     No assigned services found
