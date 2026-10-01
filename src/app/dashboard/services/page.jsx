@@ -28,12 +28,14 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
 
       data {
         id
-        name
-        dob
-        tob
-        pob
-        gender
-        concern
+
+        # Service details
+        service {
+          id
+          name
+          price
+        }
+
         amount
         paymentStatus
         bookingStatus
@@ -68,14 +70,11 @@ export default function AstrologerAssignedServices() {
   const services = response?.data || [];
 
   const total = response?.total || 0;
-
   const totalPages = response?.totalPages || 1;
-
   const currentPage = response?.currentPage || 1;
 
   /*
-   * Search only within records returned
-   * by the backend.
+   * Search only by service name
    */
   const filteredServices = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -84,14 +83,11 @@ export default function AstrologerAssignedServices() {
       return services;
     }
 
-    return services.filter((item) => {
-      return (
-        item?.name?.toLowerCase().includes(query) ||
-        item?.concern?.toLowerCase().includes(query) ||
-        item?.pob?.toLowerCase().includes(query) ||
-        item?.gender?.toLowerCase().includes(query)
-      );
-    });
+    return services.filter((item) =>
+      item?.service?.name
+        ?.toLowerCase()
+        .includes(query),
+    );
   }, [services, search]);
 
   if (error) {
@@ -104,6 +100,7 @@ export default function AstrologerAssignedServices() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+
       {/* HEADER */}
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
@@ -117,6 +114,7 @@ export default function AstrologerAssignedServices() {
 
       {/* SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+
         {/* TOTAL ASSIGNED */}
         <div className="bg-white rounded-2xl p-5 border shadow-sm">
           <h3 className="text-gray-500 text-sm">
@@ -159,16 +157,18 @@ export default function AstrologerAssignedServices() {
             }
           </h2>
         </div>
+
       </div>
 
       {/* SEARCH */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 mb-5">
         <div className="relative">
+
           <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
 
           <input
             type="text"
-            placeholder="Search by name, concern, place..."
+            placeholder="Search by service name..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -176,29 +176,22 @@ export default function AstrologerAssignedServices() {
             }}
             className="w-full border rounded-xl pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-black"
           />
+
         </div>
       </div>
 
       {/* TABLE */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px]">
+
+          <table className="w-full min-w-[1000px]">
+
             <thead className="bg-gray-100">
               <tr>
-                <th className="p-4 text-left">
-                  Customer
-                </th>
 
                 <th className="p-4 text-left">
-                  DOB / TOB
-                </th>
-
-                <th className="p-4 text-left">
-                  Birth Place
-                </th>
-
-                <th className="p-4 text-left">
-                  Gender
+                  Service
                 </th>
 
                 <th className="p-4 text-left">
@@ -214,57 +207,47 @@ export default function AstrologerAssignedServices() {
                 </th>
 
                 <th className="p-4 text-left">
-                  Concern
-                </th>
-
-                <th className="p-4 text-left">
                   Date
                 </th>
+
               </tr>
             </thead>
 
             <tbody>
+
               {loading ? (
+
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={5}
                     className="text-center py-10"
                   >
                     Loading assigned services...
                   </td>
                 </tr>
+
               ) : filteredServices.length > 0 ? (
+
                 filteredServices.map((item) => (
+
                   <tr
                     key={item.id}
                     className="border-t hover:bg-gray-50"
                   >
-                    {/* CUSTOMER */}
-                    <td className="p-4">
-                      <div className="font-semibold">
-                        {item.name || "-"}
-                      </div>
-                    </td>
 
-                    {/* DOB / TOB */}
+                    {/* SERVICE */}
                     <td className="p-4">
-                      <div>
-                        {item.dob || "-"}
+
+                      <div className="font-semibold text-gray-800">
+                        {item.service?.name || "-"}
                       </div>
 
-                      <span className="text-xs text-gray-500">
-                        {item.tob || "-"}
-                      </span>
-                    </td>
+                      {item.service?.price != null && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Service Price: ₹{item.service.price}
+                        </div>
+                      )}
 
-                    {/* POB */}
-                    <td className="p-4">
-                      {item.pob || "-"}
-                    </td>
-
-                    {/* GENDER */}
-                    <td className="p-4">
-                      {item.gender || "-"}
                     </td>
 
                     {/* AMOUNT */}
@@ -274,77 +257,87 @@ export default function AstrologerAssignedServices() {
 
                     {/* PAYMENT */}
                     <td className="p-4">
+
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.paymentStatus ===
-                          "SUCCESS"
+                          item.paymentStatus === "SUCCESS"
                             ? "bg-green-100 text-green-700"
                             : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
                         {item.paymentStatus}
                       </span>
+
                     </td>
 
                     {/* BOOKING */}
                     <td className="p-4">
+
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.bookingStatus ===
-                          "ASSIGNED"
+                          item.bookingStatus === "ASSIGNED"
                             ? "bg-blue-100 text-blue-700"
                             : "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {item.bookingStatus}
                       </span>
-                    </td>
 
-                    {/* CONCERN */}
-                    <td className="p-4 max-w-xs">
-                      <div className="line-clamp-2">
-                        {item.concern || "-"}
-                      </div>
                     </td>
 
                     {/* DATE */}
                     <td className="p-4 text-sm text-gray-500">
+
                       {item.createdAt
                         ? new Date(
                             Number(item.createdAt),
                           ).toLocaleString("en-IN")
                         : "-"}
+
                     </td>
+
                   </tr>
+
                 ))
+
               ) : (
+
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={5}
                     className="text-center py-10 text-gray-500"
                   >
                     No assigned services found
                   </td>
                 </tr>
+
               )}
+
             </tbody>
+
           </table>
 
           {/* PAGINATION */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t bg-white">
+
             <div className="text-sm text-gray-600">
+
               Showing page {currentPage} of{" "}
               {totalPages}
 
               <span className="ml-2 text-gray-400">
                 ({total} records)
               </span>
+
             </div>
 
             <div className="flex items-center gap-2">
+
               {/* PREVIOUS */}
               <button
-                disabled={currentPage === 1 || loading}
+                disabled={
+                  currentPage === 1 || loading
+                }
                 onClick={() =>
                   setPage((prev) => prev - 1)
                 }
@@ -370,6 +363,7 @@ export default function AstrologerAssignedServices() {
                   ),
                 )
                 .map((pageNumber) => (
+
                   <button
                     key={pageNumber}
                     onClick={() =>
@@ -384,6 +378,7 @@ export default function AstrologerAssignedServices() {
                   >
                     {pageNumber}
                   </button>
+
                 ))}
 
               {/* NEXT */}
@@ -403,11 +398,14 @@ export default function AstrologerAssignedServices() {
               >
                 Next
               </button>
+
             </div>
+
           </div>
+
         </div>
       </div>
+
     </div>
   );
 }
-
