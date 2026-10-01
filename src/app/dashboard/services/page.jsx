@@ -38,12 +38,6 @@ const GET_ASTROLOGER_ASSIGNED_BOOKED_SERVICES = gql`
         paymentStatus
         bookingStatus
         createdAt
-
-        service {
-          id
-          name
-          price
-        }
       }
     }
   }
@@ -61,19 +55,15 @@ export default function AstrologerAssignedServices() {
       variables: {
         page,
         limit,
-
-        // Only successfully paid bookings
         paymentStatus: "SUCCESS",
-
-        // Only bookings assigned to this astrologer
         bookingStatus: "ASSIGNED",
       },
-
       fetchPolicy: "network-only",
     },
   );
 
-  const response = data?.getAstrologerAssignedBookedServices;
+  const response =
+    data?.getAstrologerAssignedBookedServices;
 
   const services = response?.data || [];
 
@@ -84,7 +74,7 @@ export default function AstrologerAssignedServices() {
   const currentPage = response?.currentPage || 1;
 
   /*
-   * Search is performed on the records returned
+   * Search only within records returned
    * by the backend.
    */
   const filteredServices = useMemo(() => {
@@ -97,9 +87,9 @@ export default function AstrologerAssignedServices() {
     return services.filter((item) => {
       return (
         item?.name?.toLowerCase().includes(query) ||
-        item?.service?.name?.toLowerCase().includes(query) ||
         item?.concern?.toLowerCase().includes(query) ||
-        item?.pob?.toLowerCase().includes(query)
+        item?.pob?.toLowerCase().includes(query) ||
+        item?.gender?.toLowerCase().includes(query)
       );
     });
   }, [services, search]);
@@ -145,9 +135,12 @@ export default function AstrologerAssignedServices() {
           </h3>
 
           <h2 className="text-3xl font-bold mt-2">
-            {services.filter(
-              (s) => s.paymentStatus === "SUCCESS",
-            ).length}
+            {
+              services.filter(
+                (item) =>
+                  item.paymentStatus === "SUCCESS",
+              ).length
+            }
           </h2>
         </div>
 
@@ -158,9 +151,12 @@ export default function AstrologerAssignedServices() {
           </h3>
 
           <h2 className="text-3xl font-bold mt-2">
-            {services.filter(
-              (s) => s.bookingStatus === "ASSIGNED",
-            ).length}
+            {
+              services.filter(
+                (item) =>
+                  item.bookingStatus === "ASSIGNED",
+              ).length
+            }
           </h2>
         </div>
       </div>
@@ -172,7 +168,7 @@ export default function AstrologerAssignedServices() {
 
           <input
             type="text"
-            placeholder="Search by name, service, concern, place..."
+            placeholder="Search by name, concern, place..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -186,15 +182,11 @@ export default function AstrologerAssignedServices() {
       {/* TABLE */}
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1400px]">
+          <table className="w-full min-w-[1200px]">
             <thead className="bg-gray-100">
               <tr>
                 <th className="p-4 text-left">
                   Customer
-                </th>
-
-                <th className="p-4 text-left">
-                  Service
                 </th>
 
                 <th className="p-4 text-left">
@@ -235,7 +227,7 @@ export default function AstrologerAssignedServices() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     className="text-center py-10"
                   >
                     Loading assigned services...
@@ -252,19 +244,6 @@ export default function AstrologerAssignedServices() {
                       <div className="font-semibold">
                         {item.name || "-"}
                       </div>
-                    </td>
-
-                    {/* SERVICE */}
-                    <td className="p-4">
-                      <div className="font-medium">
-                        {item.service?.name || "-"}
-                      </div>
-
-                      {item.service?.price != null && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          ₹{item.service.price}
-                        </div>
-                      )}
                     </td>
 
                     {/* DOB / TOB */}
@@ -297,7 +276,8 @@ export default function AstrologerAssignedServices() {
                     <td className="p-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.paymentStatus === "SUCCESS"
+                          item.paymentStatus ===
+                          "SUCCESS"
                             ? "bg-green-100 text-green-700"
                             : "bg-yellow-100 text-yellow-700"
                         }`}
@@ -310,7 +290,8 @@ export default function AstrologerAssignedServices() {
                     <td className="p-4">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.bookingStatus === "ASSIGNED"
+                          item.bookingStatus ===
+                          "ASSIGNED"
                             ? "bg-blue-100 text-blue-700"
                             : "bg-gray-100 text-gray-700"
                         }`}
@@ -339,7 +320,7 @@ export default function AstrologerAssignedServices() {
               ) : (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     className="text-center py-10 text-gray-500"
                   >
                     No assigned services found
@@ -352,7 +333,8 @@ export default function AstrologerAssignedServices() {
           {/* PAGINATION */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 px-6 py-4 border-t bg-white">
             <div className="text-sm text-gray-600">
-              Showing page {currentPage} of {totalPages}
+              Showing page {currentPage} of{" "}
+              {totalPages}
 
               <span className="ml-2 text-gray-400">
                 ({total} records)
@@ -382,7 +364,10 @@ export default function AstrologerAssignedServices() {
               )
                 .slice(
                   Math.max(0, currentPage - 3),
-                  Math.min(totalPages, currentPage + 2),
+                  Math.min(
+                    totalPages,
+                    currentPage + 2,
+                  ),
                 )
                 .map((pageNumber) => (
                   <button
@@ -404,7 +389,8 @@ export default function AstrologerAssignedServices() {
               {/* NEXT */}
               <button
                 disabled={
-                  currentPage >= totalPages || loading
+                  currentPage >= totalPages ||
+                  loading
                 }
                 onClick={() =>
                   setPage((prev) => prev + 1)
