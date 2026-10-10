@@ -262,10 +262,14 @@ export const REFRESH_TOKEN = gql`
 export const JOIN_LIVE = gql`
   query JoinLive($channelName: String!, $role: String!) {
     joinLive(channelName: $channelName, role: $role) {
-      token
-      uid
       appId
       channelName
+      uid
+      rtcToken
+      chatUserId
+      chatToken
+      chatRoomId
+      chatAppKey
     }
   }
 `;
