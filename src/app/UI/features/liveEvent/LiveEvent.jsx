@@ -85,7 +85,7 @@ export default function AgentLiveStreaming() {
     if (!live?.chatUserId || !live?.chatToken) {
       throw new Error("Agora Chat credentials are missing from joinLive response");
     }
-
+    console.log("chatkkkkkkkkkkkkkkkkkkkkkkkkkeyyyyyyyyy------------:",process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY);
     const appKey =
       live.chatAppKey || process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY;
 
