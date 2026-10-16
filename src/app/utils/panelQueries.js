@@ -294,26 +294,42 @@ export const END_LIVE = gql`
 `;
 
 export const SCHEDULE_LIVE = gql`
-  mutation ScheduleLive($title: String!, $scheduledAt: String!) {
-    scheduleLive(title: $title, scheduledAt: $scheduledAt) {
+  mutation ScheduleLive(
+    $title: String!
+    $scheduledAt: String!
+    $scheduledEndAt: String!
+  ) {
+    scheduleLive(
+      title: $title
+      scheduledAt: $scheduledAt
+      scheduledEndAt: $scheduledEndAt
+    ) {
       id
+      astrologerId
       title
       channelName
       status
       scheduledAt
+      scheduledEndAt
       createdAt
     }
   }
 `;
+
 export const GET_MY_SCHEDULED_LIVES = gql`
   query GetMyScheduledLives {
     getMyScheduledLives {
       id
+      astrologerId
       title
       channelName
+      chatRoomId
       status
       scheduledAt
+      scheduledEndAt
       createdAt
+      startedAt
+      endedAt
     }
   }
 `;
@@ -327,18 +343,20 @@ export const UPDATE_SCHEDULED_LIVE = gql`
     $id: ID!
     $title: String!
     $scheduledAt: String!
+    $scheduledEndAt: String!
   ) {
     updateScheduledLive(
       id: $id
       title: $title
       scheduledAt: $scheduledAt
+      scheduledEndAt: $scheduledEndAt
     ) {
       id
       title
       channelName
       status
       scheduledAt
-      createdAt
+      scheduledEndAt
     }
   }
 `;

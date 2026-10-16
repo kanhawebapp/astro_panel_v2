@@ -9,7 +9,6 @@ import {
 } from "@apollo/client/react";
 
 import AgoraRTC from "agora-rtc-sdk-ng";
-
 import AgoraChat from "agora-chat";
 
 import {
@@ -30,39 +29,30 @@ export default function AgentLiveStreaming() {
   const [title, setTitle] = useState("");
 
   const [streamId, setStreamId] = useState(null);
-
   const [isLive, setIsLive] = useState(false);
-
   const [messages, setMessages] = useState([]);
-
   const [message, setMessage] = useState("");
-
   const [viewerCount, setViewerCount] = useState(0);
-
   const [liveInfo, setLiveInfo] = useState(null);
 
   const [starting, setStarting] = useState(false);
-
   const [ending, setEnding] = useState(false);
 
+  // Schedule live form
   const [scheduleTitle, setScheduleTitle] = useState("");
-
   const [scheduleDate, setScheduleDate] = useState("");
-
   const [scheduleTime, setScheduleTime] = useState("");
+  const [scheduleEndTime, setScheduleEndTime] = useState("");
 
-  // Edit scheduled live state
+  // Edit scheduled live form
   const [editingLiveId, setEditingLiveId] = useState(null);
-
   const [editTitle, setEditTitle] = useState("");
-
   const [editDate, setEditDate] = useState("");
-
   const [editTime, setEditTime] = useState("");
-
+  const [editEndTime, setEditEndTime] = useState("");
   const [updatingLive, setUpdatingLive] = useState(false);
 
-  // Delete scheduled live state
+  // Delete scheduled live
   const [deletingLiveId, setDeletingLiveId] = useState(null);
 
   // ============================================
@@ -70,13 +60,9 @@ export default function AgentLiveStreaming() {
   // ============================================
 
   const rtcClientRef = useRef(null);
-
   const chatClientRef = useRef(null);
-
   const micTrackRef = useRef(null);
-
   const cameraTrackRef = useRef(null);
-
   const messagesSeenRef = useRef(new Set());
 
   // ============================================
@@ -84,9 +70,7 @@ export default function AgentLiveStreaming() {
   // ============================================
 
   const [startLive] = useMutation(START_LIVE);
-
   const [endLive] = useMutation(END_LIVE);
-
   const [joinLive] = useLazyQuery(JOIN_LIVE);
 
   const [scheduleLive, { loading: scheduling }] = useMutation(
@@ -110,33 +94,56 @@ export default function AgentLiveStreaming() {
   });
 
   // ============================================
-  // SCHEDULED LIVE STREAMS
+  // DATE HELPERS
   // ============================================
 
-  const scheduledLives = (data?.getMyScheduledLives || [])
-    .filter((live) => live.status === "SCHEDULED")
-    .sort(
-      (a, b) => Number(a.scheduledAt) - Number(b.scheduledAt)
-    );
-
-  // ============================================
-  // DATE AND TIME FORMATTING
-  // ============================================
-
-  const formatScheduledDate = (timestamp) => {
+  // Supports ISO strings, Date values, and Unix timestamps.
+  const parseDate = (value) => {
     if (
-      timestamp === null ||
-      timestamp === undefined ||
-      timestamp === ""
+      value === null ||
+      value === undefined ||
+      value === ""
     ) {
-      return "-";
+      return null;
     }
 
-    const date = new Date(Number(timestamp));
+    const date =
+      typeof value === "number" ||
+      (typeof value === "string" &&
+        /^\d+$/.test(value))
+        ? new Date(Number(value))
+        : new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const formatDateForInput = (value) => {
+    const date = parseDate(value);
+
+    if (!date) return "";
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatTimeForInput = (value) => {
+    const date = parseDate(value);
+
+    if (!date) return "";
+
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${hours}:${minutes}`;
+  };
+
+  const formatScheduledDate = (value) => {
+    const date = parseDate(value);
+
+    if (!date) return "-";
 
     return date.toLocaleDateString("en-IN", {
       day: "2-digit",
@@ -145,20 +152,10 @@ export default function AgentLiveStreaming() {
     });
   };
 
-  const formatScheduledTime = (timestamp) => {
-    if (
-      timestamp === null ||
-      timestamp === undefined ||
-      timestamp === ""
-    ) {
-      return "-";
-    }
+  const formatScheduledTime = (value) => {
+    const date = parseDate(value);
 
-    const date = new Date(Number(timestamp));
-
-    if (Number.isNaN(date.getTime())) {
-      return "-";
-    }
+    if (!date) return "-";
 
     return date.toLocaleTimeString("en-IN", {
       hour: "2-digit",
@@ -166,6 +163,32 @@ export default function AgentLiveStreaming() {
       hour12: true,
     });
   };
+
+  // ============================================
+  // SCHEDULED LIVE STREAMS
+  // ============================================
+
+  // The backend must also exclude expired sessions.
+  // This frontend filter provides an additional safeguard.
+
+  const scheduledLives = (
+    data?.getMyScheduledLives || []
+  )
+    .filter((live) => {
+      const endDate = parseDate(live.scheduledEndAt);
+
+      return (
+        live.status === "SCHEDULED" &&
+        endDate &&
+        endDate.getTime() > Date.now()
+      );
+    })
+    .sort((a, b) => {
+      const startA = parseDate(a.scheduledAt)?.getTime() ?? 0;
+      const startB = parseDate(b.scheduledAt)?.getTime() ?? 0;
+
+      return startA - startB;
+    });
 
   // ============================================
   // OPEN EDIT FORM
@@ -177,40 +200,26 @@ export default function AgentLiveStreaming() {
       return;
     }
 
-    const scheduledDate = new Date(Number(live.scheduledAt));
+    const scheduledDate = parseDate(live.scheduledAt);
+    const scheduledEndDate = parseDate(live.scheduledEndAt);
 
-    if (Number.isNaN(scheduledDate.getTime())) {
-      alert("Invalid scheduled date.");
+    if (!scheduledDate || !scheduledEndDate) {
+      alert(
+        "This session has an invalid or missing schedule."
+      );
       return;
     }
 
-    // Convert the timestamp into browser-local date and time.
-
-    const year = scheduledDate.getFullYear();
-
-    const month = String(
-      scheduledDate.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      scheduledDate.getDate()
-    ).padStart(2, "0");
-
-    const hours = String(
-      scheduledDate.getHours()
-    ).padStart(2, "0");
-
-    const minutes = String(
-      scheduledDate.getMinutes()
-    ).padStart(2, "0");
+    if (scheduledEndDate.getTime() <= Date.now()) {
+      alert("This scheduled live has already expired.");
+      return;
+    }
 
     setEditingLiveId(live.id);
-
     setEditTitle(live.title || "");
-
-    setEditDate(`${year}-${month}-${day}`);
-
-    setEditTime(`${hours}:${minutes}`);
+    setEditDate(formatDateForInput(live.scheduledAt));
+    setEditTime(formatTimeForInput(live.scheduledAt));
+    setEditEndTime(formatTimeForInput(live.scheduledEndAt));
   };
 
   // ============================================
@@ -221,12 +230,10 @@ export default function AgentLiveStreaming() {
     if (updatingLive) return;
 
     setEditingLiveId(null);
-
     setEditTitle("");
-
     setEditDate("");
-
     setEditTime("");
+    setEditEndTime("");
   };
 
   // ============================================
@@ -240,24 +247,42 @@ export default function AgentLiveStreaming() {
       return;
     }
 
-    if (!editTitle.trim() || !editDate || !editTime) {
-      alert("Please fill in all fields.");
+    if (
+      !editTitle.trim() ||
+      !editDate ||
+      !editTime ||
+      !editEndTime
+    ) {
+      alert(
+        "Please fill in the title, date, start time, and end time."
+      );
       return;
     }
 
-    // Interpret the selected date and time in the browser's timezone.
-
-    const scheduledDate = new Date(
+    // Both times are interpreted in the browser's local timezone.
+    const scheduledDateTime = new Date(
       `${editDate}T${editTime}`
     );
 
-    if (Number.isNaN(scheduledDate.getTime())) {
-      alert("Invalid scheduled date and time.");
+    const scheduledEndDateTime = new Date(
+      `${editDate}T${editEndTime}`
+    );
+
+    if (
+      Number.isNaN(scheduledDateTime.getTime()) ||
+      Number.isNaN(scheduledEndDateTime.getTime())
+    ) {
+      alert("Please select a valid date and time.");
       return;
     }
 
-    if (scheduledDate.getTime() <= Date.now()) {
-      alert("Please select a future date and time.");
+    if (scheduledDateTime.getTime() <= Date.now()) {
+      alert("Please select a future start date and time.");
+      return;
+    }
+
+    if (scheduledEndDateTime <= scheduledDateTime) {
+      alert("End time must be later than start time.");
       return;
     }
 
@@ -268,21 +293,18 @@ export default function AgentLiveStreaming() {
         variables: {
           id: editingLiveId,
           title: editTitle.trim(),
-          scheduledAt: scheduledDate.toISOString(),
+          scheduledAt: scheduledDateTime.toISOString(),
+          scheduledEndAt: scheduledEndDateTime.toISOString(),
         },
       });
-
-      // Refresh the list with the updated backend data.
 
       await refetch();
 
       setEditingLiveId(null);
-
       setEditTitle("");
-
       setEditDate("");
-
       setEditTime("");
+      setEditEndTime("");
 
       alert("Scheduled live updated successfully.");
     } catch (error) {
@@ -313,7 +335,9 @@ export default function AgentLiveStreaming() {
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${live.title || "Untitled Live"}"?`
+      `Are you sure you want to delete "${
+        live.title || "Untitled Live"
+      }"?`
     );
 
     if (!confirmed) {
@@ -333,16 +357,12 @@ export default function AgentLiveStreaming() {
         throw new Error("Unable to delete scheduled live.");
       }
 
-      // Close the edit form if the deleted record was being edited.
-
       if (editingLiveId === live.id) {
         setEditingLiveId(null);
-
         setEditTitle("");
-
         setEditDate("");
-
         setEditTime("");
+        setEditEndTime("");
       }
 
       await refetch();
@@ -388,7 +408,9 @@ export default function AgentLiveStreaming() {
       );
     }
 
-    const chatClient = new AgoraChat.connection({ appKey });
+    const chatClient = new AgoraChat.connection({
+      appKey,
+    });
 
     chatClientRef.current = chatClient;
 
@@ -396,13 +418,17 @@ export default function AgentLiveStreaming() {
       onTextMessage: (msg) => {
         if (msg.chatType !== "chatRoom") return;
 
-        if (String(msg.to) !== String(live.chatRoomId)) return;
+        if (String(msg.to) !== String(live.chatRoomId)) {
+          return;
+        }
 
         const messageId =
           msg.id ||
           `${msg.from || "viewer"}-${msg.time || Date.now()}-${msg.msg}`;
 
-        if (messagesSeenRef.current.has(messageId)) return;
+        if (messagesSeenRef.current.has(messageId)) {
+          return;
+        }
 
         messagesSeenRef.current.add(messageId);
 
@@ -474,9 +500,7 @@ export default function AgentLiveStreaming() {
     if (starting) return;
 
     let rtcClient;
-
     let currentLive = null;
-
     let createdStreamId = null;
 
     try {
@@ -486,15 +510,11 @@ export default function AgentLiveStreaming() {
       }
 
       setStarting(true);
-
       setMessages([]);
-
       messagesSeenRef.current.clear();
-
       setViewerCount(0);
 
       // 1. Create or activate the stream.
-
       const { data: startData } = await startLive({
         variables: {
           title: title.trim(),
@@ -508,11 +528,9 @@ export default function AgentLiveStreaming() {
       }
 
       createdStreamId = stream.id;
-
       setStreamId(stream.id);
 
       // 2. Get publisher credentials.
-
       const { data: joinData } = await joinLive({
         variables: {
           channelName: stream.channelName,
@@ -547,7 +565,6 @@ export default function AgentLiveStreaming() {
       setLiveInfo(currentLive);
 
       // 3. Join RTC channel.
-
       rtcClient = AgoraRTC.createClient({
         mode: "live",
         codec: "vp8",
@@ -573,11 +590,9 @@ export default function AgentLiveStreaming() {
       );
 
       // 4. Connect to Agora Chat.
-
       await connectChat(currentLive);
 
       // 5. Start microphone and camera.
-
       const mic = await AgoraRTC.createMicrophoneAudioTrack();
 
       micTrackRef.current = mic;
@@ -600,11 +615,9 @@ export default function AgentLiveStreaming() {
 
       try {
         cameraTrackRef.current?.close();
-
         micTrackRef.current?.close();
 
         cameraTrackRef.current = null;
-
         micTrackRef.current = null;
 
         const chatClient = chatClientRef.current;
@@ -647,7 +660,6 @@ export default function AgentLiveStreaming() {
         }
 
         // Reset the stream if setup failed after activation.
-
         if (createdStreamId) {
           try {
             await endLive({
@@ -671,9 +683,7 @@ export default function AgentLiveStreaming() {
       rtcClientRef.current = null;
 
       setLiveInfo(null);
-
       setStreamId(null);
-
       setIsLive(false);
 
       alert(
@@ -692,7 +702,6 @@ export default function AgentLiveStreaming() {
 
   const sendAstrologerMessage = async () => {
     const text = message.trim();
-
     const chatClient = chatClientRef.current;
 
     if (!text) return;
@@ -750,22 +759,17 @@ export default function AgentLiveStreaming() {
 
     try {
       const rtcClient = rtcClientRef.current;
-
       const chatClient = chatClientRef.current;
 
       if (cameraTrackRef.current) {
         cameraTrackRef.current.stop();
-
         cameraTrackRef.current.close();
-
         cameraTrackRef.current = null;
       }
 
       if (micTrackRef.current) {
         micTrackRef.current.stop();
-
         micTrackRef.current.close();
-
         micTrackRef.current = null;
       }
 
@@ -802,17 +806,12 @@ export default function AgentLiveStreaming() {
       }
 
       setIsLive(false);
-
       setStreamId(null);
-
       setLiveInfo(null);
-
       setViewerCount(0);
-
       setMessages([]);
 
       rtcClientRef.current = null;
-
       chatClientRef.current = null;
 
       messagesSeenRef.current.clear();
@@ -834,48 +833,62 @@ export default function AgentLiveStreaming() {
   // ============================================
 
   const handleSchedule = async () => {
+    if (scheduling) return;
+
     try {
       if (
         !scheduleTitle.trim() ||
         !scheduleDate ||
-        !scheduleTime
+        !scheduleTime ||
+        !scheduleEndTime
       ) {
-        alert("Fill all scheduling fields.");
+        alert(
+          "Please fill in the title, date, start time, and end time."
+        );
         return;
       }
 
-      // Interpret selected date and time in the browser's timezone.
-
+      // Use the same date for the start and end times.
       const scheduledDateTime = new Date(
         `${scheduleDate}T${scheduleTime}`
       );
 
-      if (Number.isNaN(scheduledDateTime.getTime())) {
+      const scheduledEndDateTime = new Date(
+        `${scheduleDate}T${scheduleEndTime}`
+      );
+
+      if (
+        Number.isNaN(scheduledDateTime.getTime()) ||
+        Number.isNaN(scheduledEndDateTime.getTime())
+      ) {
         alert("Please select a valid date and time.");
         return;
       }
 
       if (scheduledDateTime.getTime() <= Date.now()) {
-        alert("Please select a future date and time.");
+        alert("Please select a future start date and time.");
         return;
       }
 
-      const scheduledAt = scheduledDateTime.toISOString();
+      if (scheduledEndDateTime <= scheduledDateTime) {
+        alert("End time must be grater than start time.");
+        return;
+      }
 
       await scheduleLive({
         variables: {
           title: scheduleTitle.trim(),
-          scheduledAt,
+          scheduledAt: scheduledDateTime.toISOString(),
+          scheduledEndAt: scheduledEndDateTime.toISOString(),
         },
       });
 
       await refetch();
 
       setScheduleTitle("");
-
       setScheduleDate("");
-
       setScheduleTime("");
+      setScheduleEndTime("");
 
       alert("Live scheduled successfully.");
     } catch (error) {
@@ -896,15 +909,12 @@ export default function AgentLiveStreaming() {
   useEffect(() => {
     return () => {
       const chatClient = chatClientRef.current;
-
       const rtcClient = rtcClientRef.current;
 
       cameraTrackRef.current?.stop();
-
       cameraTrackRef.current?.close();
 
       micTrackRef.current?.stop();
-
       micTrackRef.current?.close();
 
       if (chatClient) {
@@ -1068,24 +1078,44 @@ export default function AgentLiveStreaming() {
             </h3>
 
             <input
+              type="text"
               value={scheduleTitle}
               onChange={(e) => setScheduleTitle(e.target.value)}
               placeholder="Live Title"
               className="w-full border rounded-lg p-3 mb-3"
             />
 
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Scheduled Date
+            </label>
+
             <input
               type="date"
               value={scheduleDate}
-              min={new Date().toLocaleDateString("en-CA")}
+              min={formatDateForInput(Date.now())}
               onChange={(e) => setScheduleDate(e.target.value)}
               className="w-full border rounded-lg p-3 mb-3"
             />
+
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Start Time
+            </label>
 
             <input
               type="time"
               value={scheduleTime}
               onChange={(e) => setScheduleTime(e.target.value)}
+              className="w-full border rounded-lg p-3 mb-3"
+            />
+
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              End Time
+            </label>
+
+            <input
+              type="time"
+              value={scheduleEndTime}
+              onChange={(e) => setScheduleEndTime(e.target.value)}
               className="w-full border rounded-lg p-3 mb-4"
             />
 
@@ -1098,8 +1128,6 @@ export default function AgentLiveStreaming() {
               {scheduling ? "Scheduling..." : "Schedule Live"}
             </button>
           </div>
-
-          
 
           {/* STATISTICS */}
 
@@ -1168,7 +1196,7 @@ export default function AgentLiveStreaming() {
               Edit Scheduled Live
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Live Title
@@ -1192,7 +1220,7 @@ export default function AgentLiveStreaming() {
                 <input
                   type="date"
                   value={editDate}
-                  min={new Date().toLocaleDateString("en-CA")}
+                  min={formatDateForInput(Date.now())}
                   onChange={(e) => setEditDate(e.target.value)}
                   className="w-full border rounded-lg p-3 bg-white"
                   required
@@ -1201,13 +1229,27 @@ export default function AgentLiveStreaming() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Scheduled Time
+                  Start Time
                 </label>
 
                 <input
                   type="time"
                   value={editTime}
                   onChange={(e) => setEditTime(e.target.value)}
+                  className="w-full border rounded-lg p-3 bg-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  End Time
+                </label>
+
+                <input
+                  type="time"
+                  value={editEndTime}
+                  onChange={(e) => setEditEndTime(e.target.value)}
                   className="w-full border rounded-lg p-3 bg-white"
                   required
                 />
@@ -1269,7 +1311,11 @@ export default function AgentLiveStreaming() {
                   </th>
 
                   <th className="border px-4 py-3 whitespace-nowrap">
-                    Scheduled Time
+                    Start Time
+                  </th>
+
+                  <th className="border px-4 py-3 whitespace-nowrap">
+                    End Time
                   </th>
 
                   <th className="border px-4 py-3 whitespace-nowrap">
@@ -1306,6 +1352,10 @@ export default function AgentLiveStreaming() {
 
                     <td className="border px-4 py-3 whitespace-nowrap text-gray-600">
                       {formatScheduledTime(live.scheduledAt)}
+                    </td>
+
+                    <td className="border px-4 py-3 whitespace-nowrap text-gray-600">
+                      {formatScheduledTime(live.scheduledEndAt)}
                     </td>
 
                     <td className="border px-4 py-3 text-gray-600">
