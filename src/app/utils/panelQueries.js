@@ -317,3 +317,38 @@ export const GET_MY_SCHEDULED_LIVES = gql`
     }
   }
 `;
+
+// ============================================
+// UPDATE SCHEDULED LIVE
+// ============================================
+
+export const UPDATE_SCHEDULED_LIVE = gql`
+  mutation UpdateScheduledLive(
+    $id: ID!
+    $title: String!
+    $scheduledAt: String!
+  ) {
+    updateScheduledLive(
+      id: $id
+      title: $title
+      scheduledAt: $scheduledAt
+    ) {
+      id
+      title
+      channelName
+      status
+      scheduledAt
+      createdAt
+    }
+  }
+`;
+
+// ============================================
+// DELETE SCHEDULED LIVE
+// ============================================
+
+export const DELETE_SCHEDULED_LIVE = gql`
+  mutation DeleteScheduledLive($id: ID!) {
+    deleteScheduledLive(id: $id)
+  }
+`;
