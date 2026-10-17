@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  useMutation,
-  useQuery,
-  useLazyQuery,
-} from "@apollo/client/react";
+import { useMutation, useQuery, useLazyQuery } from "@apollo/client/react";
 
 import AgoraRTC from "agora-rtc-sdk-ng";
 import AgoraChat from "agora-chat";
@@ -54,6 +50,8 @@ export default function AgentLiveStreaming() {
 
   // Delete scheduled live
   const [deletingLiveId, setDeletingLiveId] = useState(null);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isCameraPaused, setIsCameraPaused] = useState(false);
 
   // ============================================
   // REFS
@@ -73,17 +71,11 @@ export default function AgentLiveStreaming() {
   const [endLive] = useMutation(END_LIVE);
   const [joinLive] = useLazyQuery(JOIN_LIVE);
 
-  const [scheduleLive, { loading: scheduling }] = useMutation(
-    SCHEDULE_LIVE
-  );
+  const [scheduleLive, { loading: scheduling }] = useMutation(SCHEDULE_LIVE);
 
-  const [updateScheduledLive] = useMutation(
-    UPDATE_SCHEDULED_LIVE
-  );
+  const [updateScheduledLive] = useMutation(UPDATE_SCHEDULED_LIVE);
 
-  const [deleteScheduledLive] = useMutation(
-    DELETE_SCHEDULED_LIVE
-  );
+  const [deleteScheduledLive] = useMutation(DELETE_SCHEDULED_LIVE);
 
   const {
     data,
@@ -99,18 +91,13 @@ export default function AgentLiveStreaming() {
 
   // Supports ISO strings, Date values, and Unix timestamps.
   const parseDate = (value) => {
-    if (
-      value === null ||
-      value === undefined ||
-      value === ""
-    ) {
+    if (value === null || value === undefined || value === "") {
       return null;
     }
 
     const date =
       typeof value === "number" ||
-      (typeof value === "string" &&
-        /^\d+$/.test(value))
+      (typeof value === "string" && /^\d+$/.test(value))
         ? new Date(Number(value))
         : new Date(value);
 
@@ -171,16 +158,12 @@ export default function AgentLiveStreaming() {
   // The backend must also exclude expired sessions.
   // This frontend filter provides an additional safeguard.
 
-  const scheduledLives = (
-    data?.getMyScheduledLives || []
-  )
+  const scheduledLives = (data?.getMyScheduledLives || [])
     .filter((live) => {
       const endDate = parseDate(live.scheduledEndAt);
 
       return (
-        live.status === "SCHEDULED" &&
-        endDate &&
-        endDate.getTime() > Date.now()
+        live.status === "SCHEDULED" && endDate && endDate.getTime() > Date.now()
       );
     })
     .sort((a, b) => {
@@ -204,9 +187,7 @@ export default function AgentLiveStreaming() {
     const scheduledEndDate = parseDate(live.scheduledEndAt);
 
     if (!scheduledDate || !scheduledEndDate) {
-      alert(
-        "This session has an invalid or missing schedule."
-      );
+      alert("This session has an invalid or missing schedule.");
       return;
     }
 
@@ -247,26 +228,15 @@ export default function AgentLiveStreaming() {
       return;
     }
 
-    if (
-      !editTitle.trim() ||
-      !editDate ||
-      !editTime ||
-      !editEndTime
-    ) {
-      alert(
-        "Please fill in the title, date, start time, and end time."
-      );
+    if (!editTitle.trim() || !editDate || !editTime || !editEndTime) {
+      alert("Please fill in the title, date, start time, and end time.");
       return;
     }
 
     // Both times are interpreted in the browser's local timezone.
-    const scheduledDateTime = new Date(
-      `${editDate}T${editTime}`
-    );
+    const scheduledDateTime = new Date(`${editDate}T${editTime}`);
 
-    const scheduledEndDateTime = new Date(
-      `${editDate}T${editEndTime}`
-    );
+    const scheduledEndDateTime = new Date(`${editDate}T${editEndTime}`);
 
     if (
       Number.isNaN(scheduledDateTime.getTime()) ||
@@ -313,7 +283,7 @@ export default function AgentLiveStreaming() {
       alert(
         error?.graphQLErrors?.[0]?.message ||
           error?.message ||
-          "Failed to update scheduled live."
+          "Failed to update scheduled live.",
       );
     } finally {
       setUpdatingLive(false);
@@ -335,9 +305,7 @@ export default function AgentLiveStreaming() {
     }
 
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${
-        live.title || "Untitled Live"
-      }"?`
+      `Are you sure you want to delete "${live.title || "Untitled Live"}"?`,
     );
 
     if (!confirmed) {
@@ -374,7 +342,7 @@ export default function AgentLiveStreaming() {
       alert(
         error?.graphQLErrors?.[0]?.message ||
           error?.message ||
-          "Failed to delete scheduled live."
+          "Failed to delete scheduled live.",
       );
     } finally {
       setDeletingLiveId(null);
@@ -387,24 +355,20 @@ export default function AgentLiveStreaming() {
 
   const connectChat = useCallback(async (live) => {
     if (!live?.chatRoomId) {
-      throw new Error(
-        "Chat room ID is missing from joinLive response."
-      );
+      throw new Error("Chat room ID is missing from joinLive response.");
     }
 
     if (!live?.chatUserId || !live?.chatToken) {
       throw new Error(
-        "Agora Chat credentials are missing from joinLive response."
+        "Agora Chat credentials are missing from joinLive response.",
       );
     }
 
-    const appKey =
-      live.chatAppKey ||
-      process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY;
+    const appKey = live.chatAppKey || process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY;
 
     if (!appKey) {
       throw new Error(
-        "Agora Chat App Key is missing. Configure NEXT_PUBLIC_AGORA_CHAT_APPKEY."
+        "Agora Chat App Key is missing. Configure NEXT_PUBLIC_AGORA_CHAT_APPKEY.",
       );
     }
 
@@ -443,14 +407,10 @@ export default function AgentLiveStreaming() {
         const isGift = payload?.type === "gift";
 
         const sender =
-          (isGift ? payload.senderName : null) ||
-          msg.from ||
-          "Viewer";
+          (isGift ? payload.senderName : null) || msg.from || "Viewer";
 
         const text = isGift
-          ? `sent ${payload.quantity ?? 1} x ${
-              payload.giftName || "gift"
-            }`
+          ? `sent ${payload.quantity ?? 1} x ${payload.giftName || "gift"}`
           : String(msg.msg ?? "");
 
         setMessages((previous) => [
@@ -493,6 +453,83 @@ export default function AgentLiveStreaming() {
   }, []);
 
   // ============================================
+  // MUTE / UNMUTE MICROPHONE
+  // ============================================
+
+  const handleToggleMicrophone = async () => {
+    const micTrack = micTrackRef.current;
+
+    if (!isLive || !micTrack) {
+      alert("Microphone is not available.");
+      return;
+    }
+
+    try {
+      // isMicMuted is false when the microphone is enabled.
+      const shouldMute = !isMicMuted;
+
+      await micTrack.setEnabled(!shouldMute);
+
+      setIsMicMuted(shouldMute);
+
+      console.log(shouldMute ? "Microphone muted" : "Microphone unmuted");
+    } catch (error) {
+      console.error("Microphone toggle error:", error);
+
+      alert("Unable to change microphone state.");
+    }
+  };
+
+  // ============================================
+  // PAUSE / RESUME CAMERA
+  // ============================================
+
+  const handleToggleCamera = async () => {
+    const cameraTrack = cameraTrackRef.current;
+
+    if (!isLive || !cameraTrack) {
+      alert("Camera is not available.");
+      return;
+    }
+
+    try {
+      // isCameraPaused is false when the camera is enabled.
+      const shouldPause = !isCameraPaused;
+
+      await cameraTrack.setEnabled(!shouldPause);
+
+      setIsCameraPaused(shouldPause);
+
+      // Keep the local preview in sync with the camera state.
+      const localPlayer = document.getElementById("local-player");
+
+      if (shouldPause) {
+        cameraTrack.stop();
+
+        if (localPlayer) {
+          localPlayer.querySelectorAll("video").forEach((video) => {
+            video.style.display = "none";
+          });
+        }
+      } else {
+        cameraTrack.play("local-player");
+
+        if (localPlayer) {
+          localPlayer.querySelectorAll("video").forEach((video) => {
+            video.style.display = "block";
+          });
+        }
+      }
+
+      console.log(shouldPause ? "Camera paused" : "Camera resumed");
+    } catch (error) {
+      console.error("Camera toggle error:", error);
+
+      alert("Unable to change camera state.");
+    }
+  };
+
+  // ============================================
   // START LIVE
   // ============================================
 
@@ -513,6 +550,8 @@ export default function AgentLiveStreaming() {
       setMessages([]);
       messagesSeenRef.current.clear();
       setViewerCount(0);
+      setIsMicMuted(false);
+      setIsCameraPaused(false);
 
       // 1. Create or activate the stream.
       const { data: startData } = await startLive({
@@ -547,9 +586,7 @@ export default function AgentLiveStreaming() {
         !live?.channelName ||
         live?.uid == null
       ) {
-        throw new Error(
-          "Missing Agora RTC publisher credentials."
-        );
+        throw new Error("Missing Agora RTC publisher credentials.");
       }
 
       if (!live.chatRoomId) {
@@ -586,7 +623,7 @@ export default function AgentLiveStreaming() {
         live.appId,
         live.channelName,
         live.rtcToken,
-        live.uid
+        live.uid,
       );
 
       // 4. Connect to Agora Chat.
@@ -601,9 +638,19 @@ export default function AgentLiveStreaming() {
 
       cameraTrackRef.current = camera;
 
+      // Both tracks start enabled.
+      await mic.setEnabled(true);
+      await camera.setEnabled(true);
+
+      // Publish microphone and camera.
       await rtcClient.publish([mic, camera]);
 
+      // Display local camera preview.
       camera.play("local-player");
+
+      // Reset control states.
+      setIsMicMuted(false);
+      setIsCameraPaused(false);
 
       setIsLive(true);
 
@@ -629,20 +676,14 @@ export default function AgentLiveStreaming() {
                 roomId: String(currentLive.chatRoomId),
               });
             } catch (leaveError) {
-              console.warn(
-                "Start failure chat-room cleanup:",
-                leaveError
-              );
+              console.warn("Start failure chat-room cleanup:", leaveError);
             }
           }
 
           try {
             await chatClient.close();
           } catch (closeError) {
-            console.warn(
-              "Start failure chat cleanup:",
-              closeError
-            );
+            console.warn("Start failure chat cleanup:", closeError);
           }
 
           chatClientRef.current = null;
@@ -652,10 +693,7 @@ export default function AgentLiveStreaming() {
           try {
             await rtcClient.leave();
           } catch (rtcCleanupError) {
-            console.warn(
-              "Start failure RTC cleanup:",
-              rtcCleanupError
-            );
+            console.warn("Start failure RTC cleanup:", rtcCleanupError);
           }
         }
 
@@ -672,7 +710,7 @@ export default function AgentLiveStreaming() {
           } catch (endCleanupError) {
             console.warn(
               "Failed to reset stream after start failure:",
-              endCleanupError
+              endCleanupError,
             );
           }
         }
@@ -686,10 +724,19 @@ export default function AgentLiveStreaming() {
       setStreamId(null);
       setIsLive(false);
 
+      setIsMicMuted(false);
+      setIsCameraPaused(false);
+
+      const localPlayer = document.getElementById("local-player");
+
+      if (localPlayer) {
+        localPlayer.innerHTML = "";
+      }
+
       alert(
         error?.graphQLErrors?.[0]?.message ||
           error?.message ||
-          "Failed to start live."
+          "Failed to start live.",
       );
     } finally {
       setStarting(false);
@@ -723,9 +770,7 @@ export default function AgentLiveStreaming() {
 
       const sentId =
         outgoing.id ||
-        `local-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2)}`;
+        `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       messagesSeenRef.current.add(sentId);
 
@@ -752,6 +797,10 @@ export default function AgentLiveStreaming() {
   // END LIVE
   // ============================================
 
+  // ============================================
+  // END LIVE
+  // ============================================
+
   const handleEndLive = async () => {
     if (ending) return;
 
@@ -761,18 +810,31 @@ export default function AgentLiveStreaming() {
       const rtcClient = rtcClientRef.current;
       const chatClient = chatClientRef.current;
 
+      // 1. Stop and close the camera track.
       if (cameraTrackRef.current) {
-        cameraTrackRef.current.stop();
-        cameraTrackRef.current.close();
+        try {
+          cameraTrackRef.current.stop();
+          cameraTrackRef.current.close();
+        } catch (error) {
+          console.warn("Camera cleanup warning:", error);
+        }
+
         cameraTrackRef.current = null;
       }
 
+      // 2. Stop and close the microphone track.
       if (micTrackRef.current) {
-        micTrackRef.current.stop();
-        micTrackRef.current.close();
+        try {
+          micTrackRef.current.stop();
+          micTrackRef.current.close();
+        } catch (error) {
+          console.warn("Microphone cleanup warning:", error);
+        }
+
         micTrackRef.current = null;
       }
 
+      // 3. Unpublish and leave the Agora RTC channel.
       if (rtcClient) {
         try {
           await rtcClient.unpublish();
@@ -780,9 +842,14 @@ export default function AgentLiveStreaming() {
           console.warn("RTC unpublish warning:", error);
         }
 
-        await rtcClient.leave();
+        try {
+          await rtcClient.leave();
+        } catch (error) {
+          console.warn("RTC leave warning:", error);
+        }
       }
 
+      // 4. Leave Agora Chat.
       if (chatClient) {
         if (liveInfo?.chatRoomId) {
           try {
@@ -794,9 +861,14 @@ export default function AgentLiveStreaming() {
           }
         }
 
-        await chatClient.close();
+        try {
+          await chatClient.close();
+        } catch (error) {
+          console.warn("Chat close warning:", error);
+        }
       }
 
+      // 5. Update backend live status.
       if (streamId) {
         await endLive({
           variables: {
@@ -805,24 +877,43 @@ export default function AgentLiveStreaming() {
         });
       }
 
+      // 6. Reset component state.
       setIsLive(false);
       setStreamId(null);
       setLiveInfo(null);
+
       setViewerCount(0);
       setMessages([]);
+
+      setIsMicMuted(false);
+      setIsCameraPaused(false);
+
+      setMessage("");
 
       rtcClientRef.current = null;
       chatClientRef.current = null;
 
       messagesSeenRef.current.clear();
 
+      // Clear the local video preview container.
+      const localPlayer = document.getElementById("local-player");
+
+      if (localPlayer) {
+        localPlayer.innerHTML = "";
+      }
+
+      // 7. Refresh scheduled lives.
       await refetch();
 
       alert("Live ended successfully.");
     } catch (error) {
       console.error("End live error:", error);
 
-      alert(error?.message || "Failed to end live.");
+      alert(
+        error?.graphQLErrors?.[0]?.message ||
+          error?.message ||
+          "Failed to end live.",
+      );
     } finally {
       setEnding(false);
     }
@@ -842,19 +933,15 @@ export default function AgentLiveStreaming() {
         !scheduleTime ||
         !scheduleEndTime
       ) {
-        alert(
-          "Please fill in the title, date, start time, and end time."
-        );
+        alert("Please fill in the title, date, start time, and end time.");
         return;
       }
 
       // Use the same date for the start and end times.
-      const scheduledDateTime = new Date(
-        `${scheduleDate}T${scheduleTime}`
-      );
+      const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}`);
 
       const scheduledEndDateTime = new Date(
-        `${scheduleDate}T${scheduleEndTime}`
+        `${scheduleDate}T${scheduleEndTime}`,
       );
 
       if (
@@ -897,7 +984,7 @@ export default function AgentLiveStreaming() {
       alert(
         error?.graphQLErrors?.[0]?.message ||
           error?.message ||
-          "Failed to schedule live."
+          "Failed to schedule live.",
       );
     }
   };
@@ -946,9 +1033,7 @@ export default function AgentLiveStreaming() {
 
         <div className="xl:col-span-2 bg-white rounded-xl shadow p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">
-              Live Streaming
-            </h2>
+            <h2 className="text-2xl font-bold">Live Streaming</h2>
 
             <span
               className={`px-4 py-2 rounded-full ${
@@ -973,35 +1058,103 @@ export default function AgentLiveStreaming() {
             className="w-full h-[500px] rounded-xl overflow-hidden bg-black"
           />
 
-          <div className="flex gap-4 mt-5">
+          {/* ============================================
+    LIVE STREAMING CONTROLS
+============================================ */}
+
+          <div className="flex flex-wrap items-center gap-3 mt-5">
             {!isLive ? (
               <button
                 type="button"
                 onClick={handleStartLive}
-                disabled={starting}
-                className="bg-red-600 text-white px-6 py-3 rounded-lg disabled:opacity-50"
+                disabled={starting || ending}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg disabled:opacity-50 transition"
               >
                 {starting ? "Starting..." : "Start Live Now"}
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={handleEndLive}
-                disabled={ending}
-                className="bg-black text-white px-6 py-3 rounded-lg disabled:opacity-50"
-              >
-                {ending ? "Ending..." : "End Live"}
-              </button>
+              <>
+                {/* MUTE / UNMUTE MICROPHONE */}
+
+                <button
+                  type="button"
+                  onClick={handleToggleMicrophone}
+                  disabled={ending || !micTrackRef.current}
+                  aria-pressed={isMicMuted}
+                  className={`px-5 py-3 rounded-lg font-semibold text-white transition disabled:opacity-50 ${
+                    isMicMuted
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-green-600 hover:bg-green-700"
+                  }`}
+                >
+                  {isMicMuted ? "🔇 Unmute Mic" : "🎤 Mute Mic"}
+                </button>
+
+                {/* PAUSE / RESUME CAMERA */}
+
+                <button
+                  type="button"
+                  onClick={handleToggleCamera}
+                  disabled={ending || !cameraTrackRef.current}
+                  aria-pressed={isCameraPaused}
+                  className={`px-5 py-3 rounded-lg font-semibold text-white transition disabled:opacity-50 ${
+                    isCameraPaused
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "bg-amber-500 hover:bg-amber-600"
+                  }`}
+                >
+                  {isCameraPaused ? "▶ Resume Video" : "⏸ Pause Video"}
+                </button>
+
+                {/* END LIVE */}
+
+                <button
+                  type="button"
+                  onClick={handleEndLive}
+                  disabled={ending}
+                  className="bg-black hover:bg-gray-800 text-white px-6 py-3 rounded-lg disabled:opacity-50 transition"
+                >
+                  {ending ? "Ending..." : "End Live"}
+                </button>
+              </>
             )}
           </div>
+
+          {/* ============================================
+    MICROPHONE / CAMERA STATUS
+============================================ */}
+
+          {isLive && (
+            <div className="flex flex-wrap gap-3 mt-4">
+              <span
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
+                  isMicMuted
+                    ? "bg-red-100 text-red-700"
+                    : "bg-green-100 text-green-700"
+                }`}
+              >
+                <span>{isMicMuted ? "🔇" : "🎤"}</span>
+                Microphone: {isMicMuted ? "Muted" : "On"}
+              </span>
+
+              <span
+                className={`inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
+                  isCameraPaused
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-green-100 text-green-700"
+                }`}
+              >
+                <span>{isCameraPaused ? "⏸" : "📹"}</span>
+                Camera: {isCameraPaused ? "Paused" : "On"}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* LIVE CHAT */}
 
         <div className="bg-white rounded-xl shadow p-4 h-[650px] flex flex-col">
-          <h3 className="text-xl font-bold mb-4">
-            Live Chat
-          </h3>
+          <h3 className="text-xl font-bold mb-4">Live Chat</h3>
 
           <div className="flex-1 overflow-y-auto border rounded-lg p-3 bg-gray-50">
             {messages.length === 0 ? (
@@ -1029,14 +1182,10 @@ export default function AgentLiveStreaming() {
                       🎁 {msg.text}
                     </p>
                   ) : (
-                    <p className="text-gray-700">
-                      {msg.text}
-                    </p>
+                    <p className="text-gray-700">{msg.text}</p>
                   )}
 
-                  <p className="text-xs text-gray-400 mt-1">
-                    {msg.time}
-                  </p>
+                  <p className="text-xs text-gray-400 mt-1">{msg.time}</p>
                 </div>
               ))
             )}
@@ -1073,9 +1222,7 @@ export default function AgentLiveStreaming() {
           {/* SCHEDULE LIVE FORM */}
 
           <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="text-xl font-bold mb-4">
-              Schedule Live
-            </h3>
+            <h3 className="text-xl font-bold mb-4">Schedule Live</h3>
 
             <input
               type="text"
@@ -1132,17 +1279,13 @@ export default function AgentLiveStreaming() {
           {/* STATISTICS */}
 
           <div className="bg-white rounded-xl shadow p-4">
-            <h3 className="text-xl font-bold mb-4">
-              Statistics
-            </h3>
+            <h3 className="text-xl font-bold mb-4">Statistics</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-100 p-3 rounded-lg">
                 <p>Total Viewers</p>
 
-                <h2 className="text-2xl font-bold">
-                  {viewerCount}
-                </h2>
+                <h2 className="text-2xl font-bold">{viewerCount}</h2>
               </div>
 
               <div className="bg-gray-100 p-3 rounded-lg">
@@ -1298,9 +1441,7 @@ export default function AgentLiveStreaming() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-100 text-gray-700">
-                  <th className="border px-4 py-3 whitespace-nowrap">
-                    #
-                  </th>
+                  <th className="border px-4 py-3 whitespace-nowrap">#</th>
 
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Live Title
@@ -1322,9 +1463,7 @@ export default function AgentLiveStreaming() {
                     Channel Name
                   </th>
 
-                  <th className="border px-4 py-3 whitespace-nowrap">
-                    Status
-                  </th>
+                  <th className="border px-4 py-3 whitespace-nowrap">Status</th>
 
                   <th className="border px-4 py-3 whitespace-nowrap text-center">
                     Actions
@@ -1334,10 +1473,7 @@ export default function AgentLiveStreaming() {
 
               <tbody>
                 {scheduledLives.map((live, index) => (
-                  <tr
-                    key={live.id}
-                    className="hover:bg-gray-50 transition"
-                  >
+                  <tr key={live.id} className="hover:bg-gray-50 transition">
                     <td className="border px-4 py-3 text-gray-600">
                       {index + 1}
                     </td>
@@ -1373,10 +1509,7 @@ export default function AgentLiveStreaming() {
                         <button
                           type="button"
                           onClick={() => handleEditClick(live)}
-                          disabled={
-                            updatingLive ||
-                            deletingLiveId === live.id
-                          }
+                          disabled={updatingLive || deletingLiveId === live.id}
                           className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50"
                         >
                           Edit
@@ -1385,10 +1518,7 @@ export default function AgentLiveStreaming() {
                         <button
                           type="button"
                           onClick={() => handleDeleteScheduledLive(live)}
-                          disabled={
-                            deletingLiveId === live.id ||
-                            updatingLive
-                          }
+                          disabled={deletingLiveId === live.id || updatingLive}
                           className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50"
                         >
                           {deletingLiveId === live.id
