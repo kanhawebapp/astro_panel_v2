@@ -206,6 +206,23 @@ export const TOGGLE_ASTROLOGER_SERVICE = gql`
   }
 `;
 
+export const START_LIVE_TOGGLE_SERVICES = gql`
+  mutation StartLiveToggleServices(
+    $astrologerId: ID!
+    $serviceType: String!
+    $status: Boolean!
+  ) {
+    startLiveToggleServices(
+      astrologerId: $astrologerId
+      serviceType: $serviceType
+      status: $status
+    ) {
+      success
+      message
+    }
+  }
+`;
+
 export const GET_ASTROLOGER_SERVICES = gql`
   query GetAstrologerServices($astrologerId: String!) {
     getAstrologerById(astrologerId: $astrologerId) {

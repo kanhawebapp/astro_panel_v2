@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useMutation, useQuery, useLazyQuery } from "@apollo/client/react";
+import { useApolloClient, useMutation, useQuery } from "@apollo/client/react";
 
 import AgoraRTC from "agora-rtc-sdk-ng";
 import AgoraChat from "agora-chat";
@@ -15,9 +15,12 @@ import {
   GET_MY_SCHEDULED_LIVES,
   UPDATE_SCHEDULED_LIVE,
   DELETE_SCHEDULED_LIVE,
+  START_LIVE_TOGGLE_SERVICES
 } from "@/app/utils/panelQueries";
 
-export default function AgentLiveStreaming() {
+
+
+export default function AgentLiveStreaming({ astrologerId }) {
   // ============================================
   // STATE
   // ============================================
@@ -33,6 +36,8 @@ export default function AgentLiveStreaming() {
 
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [restoringLive, setRestoringLive] = useState(false);
+  const [recoveryRequired, setRecoveryRequired] = useState(false);
 
   // Schedule live form
   const [scheduleTitle, setScheduleTitle] = useState("");
@@ -62,6 +67,9 @@ export default function AgentLiveStreaming() {
   const micTrackRef = useRef(null);
   const cameraTrackRef = useRef(null);
   const messagesSeenRef = useRef(new Set());
+  const restoreAttemptRef = useRef(false);
+  const restoreTimerRef = useRef(null);
+  const apolloClient = useApolloClient();
 
   // ============================================
   // GRAPHQL MUTATIONS AND QUERIES
@@ -69,13 +77,13 @@ export default function AgentLiveStreaming() {
 
   const [startLive] = useMutation(START_LIVE);
   const [endLive] = useMutation(END_LIVE);
-  const [joinLive] = useLazyQuery(JOIN_LIVE);
 
   const [scheduleLive, { loading: scheduling }] = useMutation(SCHEDULE_LIVE);
 
   const [updateScheduledLive] = useMutation(UPDATE_SCHEDULED_LIVE);
 
   const [deleteScheduledLive] = useMutation(DELETE_SCHEDULED_LIVE);
+  const [startLiveToggleServices] = useMutation(START_LIVE_TOGGLE_SERVICES);
 
   const {
     data,
@@ -453,6 +461,238 @@ export default function AgentLiveStreaming() {
   }, []);
 
   // ============================================
+  // RESTORE ACTIVE LIVE AFTER PAGE REFRESH
+  // ============================================
+
+  useEffect(() => {
+    let cancelled = false;
+    let rtcClient = null;
+    let micTrack = null;
+    let cameraTrack = null;
+    let restoredChatClient = null;
+
+    const restoreActiveLive = async () => {
+      if (restoreAttemptRef.current || cancelled) return;
+
+      let savedSession;
+
+      try {
+        const savedSessionText = localStorage.getItem("dhwaniastro_active_live");
+        if (!savedSessionText) {
+          setRecoveryRequired(false);
+          return;
+        }
+
+        savedSession = JSON.parse(savedSessionText);
+
+        if (!savedSession?.streamId || !savedSession?.channelName) {
+          localStorage.removeItem("dhwaniastro_active_live");
+          setRecoveryRequired(false);
+          return;
+        }
+
+        restoreAttemptRef.current = true;
+        setRestoringLive(true);
+        setRecoveryRequired(true);
+        setTitle(savedSession.title || "");
+        setStreamId(savedSession.streamId);
+
+        // Use client.query instead of useLazyQuery. Apollo lazy-query execution
+        // can be aborted when React StrictMode performs its development
+        // setup/cleanup cycle. A direct client.query is not tied to hook cleanup.
+        const { data: joinData } = await apolloClient.query({
+          query: JOIN_LIVE,
+          variables: {
+            channelName: savedSession.channelName,
+            role: "publisher",
+          },
+          fetchPolicy: "no-cache",
+          errorPolicy: "none",
+        });
+
+        if (cancelled) return;
+
+        const live = joinData?.joinLive;
+        if (
+          !live?.appId ||
+          !live?.rtcToken ||
+          !live?.channelName ||
+          live?.uid == null ||
+          !live?.chatRoomId ||
+          !live?.chatUserId ||
+          !live?.chatToken
+        ) {
+          throw new Error(
+            "The backend did not return complete RTC and Chat credentials for the active live session."
+          );
+        }
+
+        const restoredLive = {
+          ...live,
+          id: savedSession.streamId,
+          title: savedSession.title || "",
+        };
+
+        localStorage.setItem(
+          "dhwaniastro_active_live",
+          JSON.stringify({
+            streamId: restoredLive.id,
+            channelName: restoredLive.channelName,
+            chatRoomId: restoredLive.chatRoomId,
+            title: restoredLive.title,
+          })
+        );
+
+        if (cancelled) return;
+
+        rtcClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        rtcClientRef.current = rtcClient;
+
+        rtcClient.on("user-joined", () => {
+          if (!cancelled) setViewerCount(rtcClient.remoteUsers.length);
+        });
+
+        rtcClient.on("user-left", () => {
+          if (!cancelled) setViewerCount(rtcClient.remoteUsers.length);
+        });
+
+        await rtcClient.setClientRole("host");
+        await rtcClient.join(
+          live.appId,
+          live.channelName,
+          live.rtcToken,
+          live.uid
+        );
+
+        if (cancelled) {
+          await rtcClient.leave().catch(() => {});
+          return;
+        }
+
+        await connectChat(restoredLive);
+        restoredChatClient = chatClientRef.current;
+
+        if (cancelled) return;
+
+        micTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        if (cancelled) {
+          micTrack.close();
+          micTrack = null;
+          return;
+        }
+        micTrackRef.current = micTrack;
+
+        cameraTrack = await AgoraRTC.createCameraVideoTrack();
+        if (cancelled) {
+          cameraTrack.close();
+          cameraTrack = null;
+          return;
+        }
+        cameraTrackRef.current = cameraTrack;
+
+        await rtcClient.publish([micTrack, cameraTrack]);
+
+        if (cancelled) return;
+
+        // Wait until the video container is present before attaching the preview.
+        requestAnimationFrame(() => {
+          if (!cancelled && cameraTrack && document.getElementById("local-player")) {
+            cameraTrack.play("local-player");
+          }
+        });
+
+        setLiveInfo(restoredLive);
+        setMessages([]);
+        messagesSeenRef.current.clear();
+        setViewerCount(rtcClient.remoteUsers.length);
+        setIsMicMuted(false);
+        setIsCameraPaused(false);
+        setIsLive(true);
+        setRecoveryRequired(false);
+
+        console.log("Active live session restored successfully.");
+      } catch (error) {
+        // Cancellation is expected if the user navigates away during recovery.
+        if (
+          cancelled ||
+          error?.name === "AbortError" ||
+          error?.name === "CanceledError"
+        ) {
+          console.info("Live restoration was cancelled; the saved session was preserved.");
+          return;
+        }
+
+        console.error("Restore active live error:", error);
+
+        try {
+          micTrack?.stop();
+          micTrack?.close();
+        } catch (cleanupError) {
+          console.warn("Restore microphone cleanup warning:", cleanupError);
+        }
+
+        try {
+          cameraTrack?.stop();
+          cameraTrack?.close();
+        } catch (cleanupError) {
+          console.warn("Restore camera cleanup warning:", cleanupError);
+        }
+
+        if (restoredChatClient) {
+          try {
+            if (savedSession?.chatRoomId) {
+              await restoredChatClient.leaveChatRoom({
+                roomId: String(savedSession.chatRoomId),
+              });
+            }
+            await restoredChatClient.close();
+          } catch (cleanupError) {
+            console.warn("Restore chat cleanup warning:", cleanupError);
+          }
+        }
+
+        if (rtcClient) {
+          try {
+            await rtcClient.leave();
+          } catch (cleanupError) {
+            console.warn("Restore RTC cleanup warning:", cleanupError);
+          }
+        }
+
+        if (micTrackRef.current === micTrack) micTrackRef.current = null;
+        if (cameraTrackRef.current === cameraTrack) cameraTrackRef.current = null;
+        if (chatClientRef.current === restoredChatClient) chatClientRef.current = null;
+        if (rtcClientRef.current === rtcClient) rtcClientRef.current = null;
+
+        if (!cancelled) {
+          setIsLive(false);
+          setLiveInfo(null);
+          setRecoveryRequired(Boolean(savedSession?.streamId));
+        }
+        // Do not clear localStorage or end the backend stream on a recoverable error.
+      } finally {
+        if (!cancelled) setRestoringLive(false);
+        restoreAttemptRef.current = false;
+      }
+    };
+
+    // React StrictMode immediately runs effect setup -> cleanup -> setup in
+    // development. Deferring one tick lets the first setup be cancelled before
+    // it starts a network request, preventing duplicate/aborted restore calls.
+    restoreTimerRef.current = window.setTimeout(() => {
+      restoreActiveLive();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      if (restoreTimerRef.current) {
+        window.clearTimeout(restoreTimerRef.current);
+        restoreTimerRef.current = null;
+      }
+    };
+  }, [apolloClient, connectChat]);
+
+  // ============================================
   // MUTE / UNMUTE MICROPHONE
   // ============================================
 
@@ -539,6 +779,8 @@ export default function AgentLiveStreaming() {
     let rtcClient;
     let currentLive = null;
     let createdStreamId = null;
+    let liveServiceEnabled = false;
+    let effectiveAstrologerId = null;
 
     try {
       if (!title.trim()) {
@@ -552,8 +794,31 @@ export default function AgentLiveStreaming() {
       setViewerCount(0);
       setIsMicMuted(false);
       setIsCameraPaused(false);
+      const astroUser = JSON.parse(localStorage.getItem("astro_user") || "{}");
+      effectiveAstrologerId = astrologerId || astroUser.id;
 
-      // 1. Create or activate the stream.
+      if (!effectiveAstrologerId) {
+        throw new Error("Astrologer ID is missing. Please pass the logged-in astrologer ID to AgentLiveStreaming.");
+      }
+
+      // 1. Enable LIVE service. Backend also disables paid CHAT and CALL.
+      const { data: toggleData } = await startLiveToggleServices({
+        variables: {
+          astrologerId: effectiveAstrologerId,
+          serviceType: "LIVE",
+          status: true,
+        },
+      });
+
+      if (!toggleData?.startLiveToggleServices?.success) {
+        throw new Error(
+          toggleData?.startLiveToggleServices?.message ||
+            "Unable to enable LIVE service.",
+        );
+      }
+      liveServiceEnabled = true;
+
+      // 2. Create or activate the stream.
       const { data: startData } = await startLive({
         variables: {
           title: title.trim(),
@@ -567,10 +832,25 @@ export default function AgentLiveStreaming() {
       }
 
       createdStreamId = stream.id;
-      setStreamId(stream.id);
 
-      // 2. Get publisher credentials.
-      const { data: joinData } = await joinLive({
+      const activeLiveSession = {
+        streamId: stream.id,
+        channelName: stream.channelName,
+        title: stream.title?.trim() || title.trim(),
+      };
+
+      // Persist immediately so a refresh during Agora setup can recover this stream.
+      localStorage.setItem(
+        "dhwaniastro_active_live",
+        JSON.stringify(activeLiveSession),
+      );
+
+      setStreamId(stream.id);
+      setTitle(activeLiveSession.title);
+
+      // 3. Get publisher credentials.
+      const { data: joinData } = await apolloClient.query({
+        query: JOIN_LIVE,
         variables: {
           channelName: stream.channelName,
           role: "publisher",
@@ -596,12 +876,23 @@ export default function AgentLiveStreaming() {
       currentLive = {
         ...live,
         id: stream.id,
-        title: stream.title || title.trim(),
+        title: stream.title?.trim() || title.trim(),
       };
 
+      setTitle(currentLive.title);
       setLiveInfo(currentLive);
 
-      // 3. Join RTC channel.
+      localStorage.setItem(
+        "dhwaniastro_active_live",
+        JSON.stringify({
+          streamId: currentLive.id,
+          channelName: currentLive.channelName,
+          chatRoomId: currentLive.chatRoomId,
+          title: currentLive.title,
+        }),
+      );
+
+      // 4. Join RTC channel.
       rtcClient = AgoraRTC.createClient({
         mode: "live",
         codec: "vp8",
@@ -626,10 +917,10 @@ export default function AgentLiveStreaming() {
         live.uid,
       );
 
-      // 4. Connect to Agora Chat.
+      // 5. Connect to Agora Chat.
       await connectChat(currentLive);
 
-      // 5. Start microphone and camera.
+      // 6. Start microphone and camera.
       const mic = await AgoraRTC.createMicrophoneAudioTrack();
 
       micTrackRef.current = mic;
@@ -653,10 +944,22 @@ export default function AgentLiveStreaming() {
       setIsCameraPaused(false);
 
       setIsLive(true);
+      setRecoveryRequired(false);
+
+      localStorage.setItem(
+        "dhwaniastro_active_live",
+        JSON.stringify({
+          streamId: currentLive.id,
+          channelName: currentLive.channelName,
+          chatRoomId: currentLive.chatRoomId,
+          title: currentLive.title,
+        }),
+      );
 
       await refetch();
+      
 
-      alert("Live started successfully.");
+      alert("Live started successfully! Your call and chat services have been temporarily disabled. They will be re-enabled automatically once you end the live session.");
     } catch (error) {
       console.error("Start live error:", error);
 
@@ -706,12 +1009,29 @@ export default function AgentLiveStreaming() {
               },
             });
 
+            localStorage.removeItem("dhwaniastro_active_live");
             await refetch();
           } catch (endCleanupError) {
             console.warn(
               "Failed to reset stream after start failure:",
               endCleanupError,
             );
+          }
+        }
+
+        // If stream setup failed, switch LIVE back off.
+        if (liveServiceEnabled && effectiveAstrologerId) {
+          try {
+            await startLiveToggleServices({
+              variables: {
+                astrologerId: effectiveAstrologerId,
+                serviceType: "LIVE",
+                status: false,
+              },
+            });
+            liveServiceEnabled = false;
+          } catch (toggleCleanupError) {
+            console.error("Failed to disable LIVE service after start failure:", toggleCleanupError);
           }
         }
       } catch (cleanupError) {
@@ -723,6 +1043,9 @@ export default function AgentLiveStreaming() {
       setLiveInfo(null);
       setStreamId(null);
       setIsLive(false);
+      setRecoveryRequired(
+        Boolean(localStorage.getItem("dhwaniastro_active_live")),
+      );
 
       setIsMicMuted(false);
       setIsCameraPaused(false);
@@ -806,11 +1129,19 @@ export default function AgentLiveStreaming() {
 
     setEnding(true);
 
-    try {
-      const rtcClient = rtcClientRef.current;
-      const chatClient = chatClientRef.current;
+    let astrologerIdForEnd = null;
+    let backendStreamEnded = false;
 
-      // 1. Stop and close the camera track.
+    try {
+      const astroUser = JSON.parse(localStorage.getItem("astro_user") || "{}");
+      astrologerIdForEnd = astrologerId || astroUser.id || null;
+
+      const savedSession = JSON.parse(
+        localStorage.getItem("dhwaniastro_active_live") || "{}",
+      );
+      const currentStreamId = streamId || savedSession.streamId;
+
+      // 1. Stop and close camera track.
       if (cameraTrackRef.current) {
         try {
           cameraTrackRef.current.stop();
@@ -818,11 +1149,10 @@ export default function AgentLiveStreaming() {
         } catch (error) {
           console.warn("Camera cleanup warning:", error);
         }
-
         cameraTrackRef.current = null;
       }
 
-      // 2. Stop and close the microphone track.
+      // 2. Stop and close microphone track.
       if (micTrackRef.current) {
         try {
           micTrackRef.current.stop();
@@ -830,11 +1160,11 @@ export default function AgentLiveStreaming() {
         } catch (error) {
           console.warn("Microphone cleanup warning:", error);
         }
-
         micTrackRef.current = null;
       }
 
-      // 3. Unpublish and leave the Agora RTC channel.
+      // 3. Leave Agora RTC channel.
+      const rtcClient = rtcClientRef.current;
       if (rtcClient) {
         try {
           await rtcClient.unpublish();
@@ -847,15 +1177,17 @@ export default function AgentLiveStreaming() {
         } catch (error) {
           console.warn("RTC leave warning:", error);
         }
+        rtcClientRef.current = null;
       }
 
-      // 4. Leave Agora Chat.
+      // 4. Leave Agora Chat room and close the connection.
+      const chatClient = chatClientRef.current;
       if (chatClient) {
-        if (liveInfo?.chatRoomId) {
+        const chatRoomId = liveInfo?.chatRoomId || savedSession.chatRoomId;
+
+        if (chatRoomId) {
           try {
-            await chatClient.leaveChatRoom({
-              roomId: String(liveInfo.chatRoomId),
-            });
+            await chatClient.leaveChatRoom({ roomId: String(chatRoomId) });
           } catch (error) {
             console.warn("Leave chat room warning:", error);
           }
@@ -866,48 +1198,76 @@ export default function AgentLiveStreaming() {
         } catch (error) {
           console.warn("Chat close warning:", error);
         }
+        chatClientRef.current = null;
       }
 
-      // 5. Update backend live status.
-      if (streamId) {
-        await endLive({
-          variables: {
-            streamId,
-          },
-        });
+      // 5. End the backend stream. Use localStorage if React state was lost.
+      if (!currentStreamId) {
+        throw new Error("Live stream ID not found. Please refresh and try again.");
       }
 
-      // 6. Reset component state.
+      await endLive({
+        variables: {
+          streamId: currentStreamId,
+        },
+      });
+      backendStreamEnded = true;
+
+      // Once backend confirms the stream ended, it must not be restored again.
+      localStorage.removeItem("dhwaniastro_active_live");
+
+      // 6. Turn LIVE off and restore CHAT/CALL through the backend resolver.
+      if (!astrologerIdForEnd) {
+        throw new Error("Astrologer ID is missing; the stream ended but services could not be restored.");
+      }
+
+      const { data: toggleData } = await startLiveToggleServices({
+        variables: {
+          astrologerId: astrologerIdForEnd,
+          serviceType: "LIVE",
+          status: false,
+        },
+      });
+
+      if (!toggleData?.startLiveToggleServices?.success) {
+        throw new Error(
+          toggleData?.startLiveToggleServices?.message ||
+            "Live ended, but unable to re-enable CHAT and CALL services.",
+        );
+      }
+
+      // 7. Reset frontend state.
       setIsLive(false);
       setStreamId(null);
       setLiveInfo(null);
-
+      setRecoveryRequired(false);
       setViewerCount(0);
       setMessages([]);
-
       setIsMicMuted(false);
       setIsCameraPaused(false);
-
       setMessage("");
-
-      rtcClientRef.current = null;
-      chatClientRef.current = null;
-
       messagesSeenRef.current.clear();
 
-      // Clear the local video preview container.
       const localPlayer = document.getElementById("local-player");
+      if (localPlayer) localPlayer.innerHTML = "";
 
-      if (localPlayer) {
-        localPlayer.innerHTML = "";
-      }
-
-      // 7. Refresh scheduled lives.
       await refetch();
 
-      alert("Live ended successfully.");
+      alert("Live ended successfully. Call and chat services are enabled.");
     } catch (error) {
       console.error("End live error:", error);
+
+      // If the backend stream ended but service toggle failed, do not leave
+      // the page showing an active session. The backend service flags need repair.
+      if (backendStreamEnded) {
+        setIsLive(false);
+        setStreamId(null);
+        setLiveInfo(null);
+        setRecoveryRequired(false);
+        setViewerCount(0);
+        const localPlayer = document.getElementById("local-player");
+        if (localPlayer) localPlayer.innerHTML = "";
+      }
 
       alert(
         error?.graphQLErrors?.[0]?.message ||
@@ -993,30 +1353,65 @@ export default function AgentLiveStreaming() {
   // COMPONENT CLEANUP
   // ============================================
 
-  useEffect(() => {
-    return () => {
-      const chatClient = chatClientRef.current;
-      const rtcClient = rtcClientRef.current;
 
-      cameraTrackRef.current?.stop();
-      cameraTrackRef.current?.close();
+useEffect(() => {
+  return () => {
+    console.log("LiveEvent component cleanup started");
 
-      micTrackRef.current?.stop();
-      micTrackRef.current?.close();
+    const chatClient = chatClientRef.current;
+    const rtcClient = rtcClientRef.current;
+    const cameraTrack = cameraTrackRef.current;
+    const micTrack = micTrackRef.current;
 
-      if (chatClient) {
-        chatClient.close().catch((error) => {
+    // Stop and close camera
+    if (cameraTrack) {
+      try {
+        cameraTrack.stop();
+        cameraTrack.close();
+      } catch (error) {
+        console.warn("Camera cleanup warning:", error);
+      }
+
+      cameraTrackRef.current = null;
+    }
+
+    // Stop and close microphone
+    if (micTrack) {
+      try {
+        micTrack.stop();
+        micTrack.close();
+      } catch (error) {
+        console.warn("Microphone cleanup warning:", error);
+      }
+
+      micTrackRef.current = null;
+    }
+
+    // Close Agora Chat safely
+    if (chatClient) {
+      Promise.resolve()
+        .then(() => chatClient.close())
+        .catch((error) => {
           console.warn("Chat cleanup warning:", error);
         });
-      }
 
-      if (rtcClient) {
-        rtcClient.leave().catch((error) => {
+      chatClientRef.current = null;
+    }
+
+    // Leave Agora RTC safely
+    if (rtcClient) {
+      Promise.resolve()
+        .then(() => rtcClient.leave())
+        .catch((error) => {
           console.warn("RTC cleanup warning:", error);
         });
-      }
-    };
-  }, []);
+
+      rtcClientRef.current = null;
+    }
+
+    console.log("LiveEvent component cleanup completed");
+  };
+}, []);
 
   // ============================================
   // UI
@@ -1047,11 +1442,37 @@ export default function AgentLiveStreaming() {
           </div>
 
           <input
+            type="text"
             className="w-full border rounded-lg p-3 mb-4"
             placeholder="Enter Live Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            disabled={isLive || starting || restoringLive}
+            required
+            maxLength={100}
           />
+
+          {restoringLive && (
+            <p className="text-sm text-blue-600 mb-3">
+              Reconnecting to your previous live session. Please wait...
+            </p>
+          )}
+
+          {recoveryRequired && !restoringLive && !isLive && (
+            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-sm text-amber-800">
+                A previous live session is still recorded. Do not start a new live session until you reconnect or end the previous one.
+              </p>
+              <button
+                type="button"
+                onClick={handleEndLive}
+                disabled={ending}
+                className="mt-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {ending ? "Ending Previous Live..." : "End Previous Live Session"}
+              </button>
+            </div>
+          )}
 
           <div
             id="local-player"
@@ -1067,10 +1488,10 @@ export default function AgentLiveStreaming() {
               <button
                 type="button"
                 onClick={handleStartLive}
-                disabled={starting || ending}
+                disabled={starting || ending || restoringLive || recoveryRequired || !title.trim()}
                 className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg disabled:opacity-50 transition"
               >
-                {starting ? "Starting..." : "Start Live Now"}
+                {restoringLive ? "Reconnecting..." : starting ? "Starting..." : "Start Live Now"}
               </button>
             ) : (
               <>
