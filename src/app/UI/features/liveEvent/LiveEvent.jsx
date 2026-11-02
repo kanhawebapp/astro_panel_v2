@@ -15,10 +15,8 @@ import {
   GET_MY_SCHEDULED_LIVES,
   UPDATE_SCHEDULED_LIVE,
   DELETE_SCHEDULED_LIVE,
-  START_LIVE_TOGGLE_SERVICES
+  START_LIVE_TOGGLE_SERVICES,
 } from "@/app/utils/panelQueries";
-
-
 
 export default function AgentLiveStreaming({ astrologerId }) {
   // ============================================
@@ -254,10 +252,18 @@ export default function AgentLiveStreaming({ astrologerId }) {
       return;
     }
 
-    if (scheduledDateTime.getTime() <= Date.now()) {
-      alert("Please select a future start date and time.");
-      return;
-    }
+          const selectedDate = new Date(scheduledDateTime);
+      const now = new Date();
+
+      const selectedTime =
+        selectedDate.getHours() * 60 + selectedDate.getMinutes();
+
+      const currentTime = now.getHours() * 60 + now.getMinutes();
+
+      if (selectedTime <= currentTime) {
+        alert("Please select a future time.");
+        return;
+      }
 
     if (scheduledEndDateTime <= scheduledDateTime) {
       alert("End time must be later than start time.");
@@ -477,7 +483,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
       let savedSession;
 
       try {
-        const savedSessionText = localStorage.getItem("dhwaniastro_active_live");
+        const savedSessionText = localStorage.getItem(
+          "dhwaniastro_active_live",
+        );
         if (!savedSessionText) {
           setRecoveryRequired(false);
           return;
@@ -523,7 +531,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
           !live?.chatToken
         ) {
           throw new Error(
-            "The backend did not return complete RTC and Chat credentials for the active live session."
+            "The backend did not return complete RTC and Chat credentials for the active live session.",
           );
         }
 
@@ -540,7 +548,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
             channelName: restoredLive.channelName,
             chatRoomId: restoredLive.chatRoomId,
             title: restoredLive.title,
-          })
+          }),
         );
 
         if (cancelled) return;
@@ -561,7 +569,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
           live.appId,
           live.channelName,
           live.rtcToken,
-          live.uid
+          live.uid,
         );
 
         if (cancelled) {
@@ -596,7 +604,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
         // Wait until the video container is present before attaching the preview.
         requestAnimationFrame(() => {
-          if (!cancelled && cameraTrack && document.getElementById("local-player")) {
+          if (
+            !cancelled &&
+            cameraTrack &&
+            document.getElementById("local-player")
+          ) {
             cameraTrack.play("local-player");
           }
         });
@@ -618,7 +630,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
           error?.name === "AbortError" ||
           error?.name === "CanceledError"
         ) {
-          console.info("Live restoration was cancelled; the saved session was preserved.");
+          console.info(
+            "Live restoration was cancelled; the saved session was preserved.",
+          );
           return;
         }
 
@@ -660,8 +674,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
         }
 
         if (micTrackRef.current === micTrack) micTrackRef.current = null;
-        if (cameraTrackRef.current === cameraTrack) cameraTrackRef.current = null;
-        if (chatClientRef.current === restoredChatClient) chatClientRef.current = null;
+        if (cameraTrackRef.current === cameraTrack)
+          cameraTrackRef.current = null;
+        if (chatClientRef.current === restoredChatClient)
+          chatClientRef.current = null;
         if (rtcClientRef.current === rtcClient) rtcClientRef.current = null;
 
         if (!cancelled) {
@@ -798,7 +814,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
       effectiveAstrologerId = astrologerId || astroUser.id;
 
       if (!effectiveAstrologerId) {
-        throw new Error("Astrologer ID is missing. Please pass the logged-in astrologer ID to AgentLiveStreaming.");
+        throw new Error(
+          "Astrologer ID is missing. Please pass the logged-in astrologer ID to AgentLiveStreaming.",
+        );
       }
 
       // 1. Enable LIVE service. Backend also disables paid CHAT and CALL.
@@ -957,9 +975,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
       );
 
       await refetch();
-      
 
-      alert("Live started successfully! Your call and chat services have been temporarily disabled. They will be re-enabled automatically once you end the live session.");
+      alert(
+        "Live started successfully! Your call and chat services have been temporarily disabled. They will be re-enabled automatically once you end the live session.",
+      );
     } catch (error) {
       console.error("Start live error:", error);
 
@@ -1031,7 +1050,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
             });
             liveServiceEnabled = false;
           } catch (toggleCleanupError) {
-            console.error("Failed to disable LIVE service after start failure:", toggleCleanupError);
+            console.error(
+              "Failed to disable LIVE service after start failure:",
+              toggleCleanupError,
+            );
           }
         }
       } catch (cleanupError) {
@@ -1203,7 +1225,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       // 5. End the backend stream. Use localStorage if React state was lost.
       if (!currentStreamId) {
-        throw new Error("Live stream ID not found. Please refresh and try again.");
+        throw new Error(
+          "Live stream ID not found. Please refresh and try again.",
+        );
       }
 
       await endLive({
@@ -1218,7 +1242,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       // 6. Turn LIVE off and restore CHAT/CALL through the backend resolver.
       if (!astrologerIdForEnd) {
-        throw new Error("Astrologer ID is missing; the stream ended but services could not be restored.");
+        throw new Error(
+          "Astrologer ID is missing; the stream ended but services could not be restored.",
+        );
       }
 
       const { data: toggleData } = await startLiveToggleServices({
@@ -1312,8 +1338,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
         return;
       }
 
-      if (scheduledDateTime.getTime() <= Date.now()) {
-        alert("Please select a future start date and time.");
+      const selectedDate = new Date(scheduledDateTime);
+      const now = new Date();
+
+      const selectedTime =
+        selectedDate.getHours() * 60 + selectedDate.getMinutes();
+
+      const currentTime = now.getHours() * 60 + now.getMinutes();
+
+      if (selectedTime <= currentTime) {
+        alert("Please select a future time.");
         return;
       }
 
@@ -1353,65 +1387,64 @@ export default function AgentLiveStreaming({ astrologerId }) {
   // COMPONENT CLEANUP
   // ============================================
 
+  useEffect(() => {
+    return () => {
+      console.log("LiveEvent component cleanup started");
 
-useEffect(() => {
-  return () => {
-    console.log("LiveEvent component cleanup started");
+      const chatClient = chatClientRef.current;
+      const rtcClient = rtcClientRef.current;
+      const cameraTrack = cameraTrackRef.current;
+      const micTrack = micTrackRef.current;
 
-    const chatClient = chatClientRef.current;
-    const rtcClient = rtcClientRef.current;
-    const cameraTrack = cameraTrackRef.current;
-    const micTrack = micTrackRef.current;
+      // Stop and close camera
+      if (cameraTrack) {
+        try {
+          cameraTrack.stop();
+          cameraTrack.close();
+        } catch (error) {
+          console.warn("Camera cleanup warning:", error);
+        }
 
-    // Stop and close camera
-    if (cameraTrack) {
-      try {
-        cameraTrack.stop();
-        cameraTrack.close();
-      } catch (error) {
-        console.warn("Camera cleanup warning:", error);
+        cameraTrackRef.current = null;
       }
 
-      cameraTrackRef.current = null;
-    }
+      // Stop and close microphone
+      if (micTrack) {
+        try {
+          micTrack.stop();
+          micTrack.close();
+        } catch (error) {
+          console.warn("Microphone cleanup warning:", error);
+        }
 
-    // Stop and close microphone
-    if (micTrack) {
-      try {
-        micTrack.stop();
-        micTrack.close();
-      } catch (error) {
-        console.warn("Microphone cleanup warning:", error);
+        micTrackRef.current = null;
       }
 
-      micTrackRef.current = null;
-    }
+      // Close Agora Chat safely
+      if (chatClient) {
+        Promise.resolve()
+          .then(() => chatClient.close())
+          .catch((error) => {
+            console.warn("Chat cleanup warning:", error);
+          });
 
-    // Close Agora Chat safely
-    if (chatClient) {
-      Promise.resolve()
-        .then(() => chatClient.close())
-        .catch((error) => {
-          console.warn("Chat cleanup warning:", error);
-        });
+        chatClientRef.current = null;
+      }
 
-      chatClientRef.current = null;
-    }
+      // Leave Agora RTC safely
+      if (rtcClient) {
+        Promise.resolve()
+          .then(() => rtcClient.leave())
+          .catch((error) => {
+            console.warn("RTC cleanup warning:", error);
+          });
 
-    // Leave Agora RTC safely
-    if (rtcClient) {
-      Promise.resolve()
-        .then(() => rtcClient.leave())
-        .catch((error) => {
-          console.warn("RTC cleanup warning:", error);
-        });
+        rtcClientRef.current = null;
+      }
 
-      rtcClientRef.current = null;
-    }
-
-    console.log("LiveEvent component cleanup completed");
-  };
-}, []);
+      console.log("LiveEvent component cleanup completed");
+    };
+  }, []);
 
   // ============================================
   // UI
@@ -1461,7 +1494,8 @@ useEffect(() => {
           {recoveryRequired && !restoringLive && !isLive && (
             <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
               <p className="text-sm text-amber-800">
-                A previous live session is still recorded. Do not start a new live session until you reconnect or end the previous one.
+                A previous live session is still recorded. Do not start a new
+                live session until you reconnect or end the previous one.
               </p>
               <button
                 type="button"
@@ -1469,7 +1503,9 @@ useEffect(() => {
                 disabled={ending}
                 className="mt-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {ending ? "Ending Previous Live..." : "End Previous Live Session"}
+                {ending
+                  ? "Ending Previous Live..."
+                  : "End Previous Live Session"}
               </button>
             </div>
           )}
@@ -1488,10 +1524,20 @@ useEffect(() => {
               <button
                 type="button"
                 onClick={handleStartLive}
-                disabled={starting || ending || restoringLive || recoveryRequired || !title.trim()}
+                disabled={
+                  starting ||
+                  ending ||
+                  restoringLive ||
+                  recoveryRequired ||
+                  !title.trim()
+                }
                 className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg disabled:opacity-50 transition"
               >
-                {restoringLive ? "Reconnecting..." : starting ? "Starting..." : "Start Live Now"}
+                {restoringLive
+                  ? "Reconnecting..."
+                  : starting
+                    ? "Starting..."
+                    : "Start Live Now"}
               </button>
             ) : (
               <>
