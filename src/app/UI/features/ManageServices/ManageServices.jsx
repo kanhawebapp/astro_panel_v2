@@ -101,6 +101,9 @@ const ManageServices = () => {
     if (!serviceData?.getAstrologerById) return;
 
     const astro = serviceData.getAstrologerById;
+    if (astro) {
+  localStorage.setItem("service_status", JSON.stringify(astro));
+}
 
     setPanels((prev) =>
       prev.map((panel) => {

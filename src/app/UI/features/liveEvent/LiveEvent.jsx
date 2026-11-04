@@ -799,6 +799,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
     let effectiveAstrologerId = null;
 
     try {
+   
+       
+       const service_status = JSON.parse(localStorage.getItem("service_status") || "null");
+       if(service_status?.isLiveActive==false){
+       alert("Please Enable Your Live Streaming Service.");
+        return; 
+       }
+
+      console.log(service_status);
+
       if (!title.trim()) {
         alert("Enter stream title.");
         return;
@@ -1155,6 +1165,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
     let backendStreamEnded = false;
 
     try {
+
       const astroUser = JSON.parse(localStorage.getItem("astro_user") || "{}");
       astrologerIdForEnd = astrologerId || astroUser.id || null;
 
@@ -1278,7 +1289,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
       if (localPlayer) localPlayer.innerHTML = "";
 
       await refetch();
-
+      localStorage.removeItem("service_status");
       alert("Live ended successfully. Call and chat services are enabled.");
     } catch (error) {
       console.error("End live error:", error);
