@@ -43,18 +43,17 @@ const Calling = () => {
 
   const statsIntervalRef = useRef(null);
 
+  const processingOfferRef = useRef(false);
+  const lastOfferSdpRef = useRef(null);
+
   // =====================================================
   // STATES
   // =====================================================
 
   const [callState, setCallState] = useState("idle");
-
   const [currentRequest, setCurrentRequest] = useState(null);
-
   const [isMuted, setIsMuted] = useState(false);
-
   const [callTime, setCallTime] = useState(0);
-
   const [callerName, setCallerName] = useState("Client");
 
   const [waveHeights, setWaveHeights] = useState(
@@ -63,6 +62,9 @@ const Calling = () => {
 
   const [remoteAudioStream, setRemoteAudioStream] =
     useState(null);
+
+  const [needsAudioGesture, setNeedsAudioGesture] =
+    useState(false);
 
   const [astroId, setAstroId] = useState(null);
 
@@ -125,8 +127,10 @@ const Calling = () => {
   // =====================================================
 
   const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const safeSeconds = Math.max(0, Number(seconds) || 0);
+
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
 
     return `${mins
       .toString()
@@ -142,7 +146,18 @@ const Calling = () => {
   const initMedia = useCallback(async () => {
     try {
       if (localStreamRef.current) {
-        return localStreamRef.current;
+        const existingTracks =
+          localStreamRef.current.getAudioTracks();
+
+        const hasLiveTrack = existingTracks.some(
+          (track) => track.readyState === "live"
+        );
+
+        if (hasLiveTrack) {
+          return localStreamRef.current;
+        }
+
+        localStreamRef.current = null;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -151,7 +166,9 @@ const Calling = () => {
         );
       }
 
-      console.log("[ASTRO][MEDIA] Requesting microphone access");
+      console.log(
+        "[ASTRO][MEDIA] Requesting microphone access"
+      );
 
       const stream =
         await navigator.mediaDevices.getUserMedia({
@@ -164,9 +181,18 @@ const Calling = () => {
 
       localStreamRef.current = stream;
 
-      console.log("[ASTRO][MEDIA] Microphone initialized:", {
-        audioTracks: stream.getAudioTracks().length,
-      });
+      console.log(
+        "[ASTRO][MEDIA] Microphone initialized:",
+        {
+          audioTracks: stream.getAudioTracks().length,
+          tracks: stream.getAudioTracks().map((track) => ({
+            enabled: track.enabled,
+            muted: track.muted,
+            readyState: track.readyState,
+            label: track.label,
+          })),
+        }
+      );
 
       return stream;
     } catch (error) {
@@ -198,29 +224,40 @@ const Calling = () => {
     console.log("[ASTRO][CALL] Cleaning up call");
 
     stopStatsMonitoring();
+    stopRingtone();
 
     setCallState("idle");
     setCallTime(0);
     setCurrentRequest(null);
     setIsMuted(false);
     setRemoteAudioStream(null);
+    setNeedsAudioGesture(false);
+    setWaveHeights(Array(20).fill(10));
 
     currentRequestRef.current = null;
 
-    // Close peer connection
+    processingOfferRef.current = false;
+    lastOfferSdpRef.current = null;
+
+    // Close peer connection.
 
     if (peerConnectionRef.current) {
-      peerConnectionRef.current.ontrack = null;
-      peerConnectionRef.current.onicecandidate = null;
-      peerConnectionRef.current.oniceconnectionstatechange = null;
-      peerConnectionRef.current.onconnectionstatechange = null;
+      const pc = peerConnectionRef.current;
 
-      peerConnectionRef.current.close();
+      pc.ontrack = null;
+      pc.onicecandidate = null;
+      pc.onicecandidateerror = null;
+      pc.oniceconnectionstatechange = null;
+      pc.onconnectionstatechange = null;
+      pc.onsignalingstatechange = null;
+      pc.onicegatheringstatechange = null;
+
+      pc.close();
 
       peerConnectionRef.current = null;
     }
 
-    // Clear ICE queue
+    // Clear ICE queue.
 
     pendingIceCandidatesRef.current = [];
 
@@ -228,7 +265,7 @@ const Calling = () => {
       "[ASTRO][ICE] PeerConnection closed and ICE queue cleared"
     );
 
-    // Stop microphone
+    // Stop microphone.
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
@@ -238,15 +275,50 @@ const Calling = () => {
       localStreamRef.current = null;
     }
 
-    // Stop remote audio
+    // Stop remote audio.
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.pause();
       remoteAudioRef.current.srcObject = null;
     }
 
-    stopRingtone();
+    console.log("[ASTRO][CALL] Cleanup completed");
   }, [stopRingtone, stopStatsMonitoring]);
+
+  // =====================================================
+  // ENABLE REMOTE AUDIO AFTER USER GESTURE
+  // =====================================================
+
+  const enableRemoteAudio = useCallback(async () => {
+    try {
+      if (!remoteAudioRef.current) {
+        return;
+      }
+
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1;
+
+      if (remoteAudioStream) {
+        remoteAudioRef.current.srcObject =
+          remoteAudioStream;
+      }
+
+      await remoteAudioRef.current.play();
+
+      setNeedsAudioGesture(false);
+
+      console.log(
+        "[ASTRO][AUDIO] Remote audio enabled by user gesture"
+      );
+    } catch (error) {
+      console.error(
+        "[ASTRO][AUDIO] Unable to enable remote audio:",
+        error
+      );
+
+      setNeedsAudioGesture(true);
+    }
+  }, [remoteAudioStream]);
 
   // =====================================================
   // SELECTED ICE CANDIDATE PAIR / AUDIO STATS
@@ -261,6 +333,7 @@ const Calling = () => {
       const stats = await pc.getStats();
 
       let selectedPair = null;
+      let transportSelectedPairId = null;
 
       const localCandidates = new Map();
       const remoteCandidates = new Map();
@@ -274,6 +347,11 @@ const Calling = () => {
           remoteCandidates.set(report.id, report);
         }
 
+        if (report.type === "transport") {
+          transportSelectedPairId =
+            report.selectedCandidatePairId || null;
+        }
+
         if (
           report.type === "candidate-pair" &&
           (report.selected || report.nominated)
@@ -281,22 +359,27 @@ const Calling = () => {
           selectedPair = report;
         }
 
-        // Audio RTP statistics
+        // Incoming audio statistics.
 
         if (
           report.type === "inbound-rtp" &&
-          report.kind === "audio"
+          (report.kind === "audio" ||
+            report.mediaType === "audio")
         ) {
           console.log("[ASTRO][STATS] Inbound audio:", {
             packetsReceived: report.packetsReceived,
             packetsLost: report.packetsLost,
             bytesReceived: report.bytesReceived,
+            jitter: report.jitter,
           });
         }
 
+        // Outgoing audio statistics.
+
         if (
           report.type === "outbound-rtp" &&
-          report.kind === "audio"
+          (report.kind === "audio" ||
+            report.mediaType === "audio")
         ) {
           console.log("[ASTRO][STATS] Outbound audio:", {
             packetsSent: report.packetsSent,
@@ -304,6 +387,15 @@ const Calling = () => {
           });
         }
       });
+
+      // Some browsers expose the selected pair through
+      // the transport report.
+
+      if (transportSelectedPairId) {
+        selectedPair =
+          stats.get(transportSelectedPairId) ||
+          selectedPair;
+      }
 
       if (selectedPair) {
         const localCandidate = localCandidates.get(
@@ -314,19 +406,34 @@ const Calling = () => {
           selectedPair.remoteCandidateId
         );
 
-        console.log("[ASTRO][ICE] Selected candidate pair:", {
-          state: selectedPair.state,
-          nominated: selectedPair.nominated,
+        console.log(
+          "[ASTRO][ICE] Selected candidate pair:",
+          {
+            state: selectedPair.state,
+            nominated: selectedPair.nominated,
+            selected: selectedPair.selected,
 
-          localCandidateType: localCandidate?.candidateType,
-          localProtocol: localCandidate?.protocol,
+            localCandidateType:
+              localCandidate?.candidateType,
 
-          remoteCandidateType: remoteCandidate?.candidateType,
-          remoteProtocol: remoteCandidate?.protocol,
+            localProtocol: localCandidate?.protocol,
 
-          currentRoundTripTime:
-            selectedPair.currentRoundTripTime,
-        });
+            remoteCandidateType:
+              remoteCandidate?.candidateType,
+
+            remoteProtocol: remoteCandidate?.protocol,
+
+            currentRoundTripTime:
+              selectedPair.currentRoundTripTime,
+
+            availableOutgoingBitrate:
+              selectedPair.availableOutgoingBitrate,
+          }
+        );
+      } else {
+        console.warn(
+          "[ASTRO][ICE] No selected candidate pair yet"
+        );
       }
     } catch (error) {
       console.error(
@@ -352,6 +459,64 @@ const Calling = () => {
   );
 
   // =====================================================
+  // BUILD ICE SERVER CONFIGURATION
+  // =====================================================
+
+  const getIceServers = useCallback(() => {
+    const iceServers = [
+      {
+        urls: "stun:stun.l.google.com:19302",
+      },
+      {
+        urls: "stun:stun1.l.google.com:19302",
+      },
+    ];
+
+    /*
+      Configure these environment variables in the
+      astrologer frontend:
+
+      NEXT_PUBLIC_TURN_URLS=turn:YOUR_HOST:3478?transport=udp,turns:YOUR_HOST:5349?transport=tcp
+      NEXT_PUBLIC_TURN_USERNAME=YOUR_USERNAME
+      NEXT_PUBLIC_TURN_CREDENTIAL=YOUR_CREDENTIAL
+
+      Use the actual URLs and credentials from your TURN
+      provider. Do not assume the example values are valid.
+    */
+
+    const turnUrls = (
+      process.env.NEXT_PUBLIC_TURN_URLS || ""
+    )
+      .split(",")
+      .map((url) => url.trim())
+      .filter(Boolean);
+
+    const turnUsername =
+      process.env.NEXT_PUBLIC_TURN_USERNAME;
+
+    const turnCredential =
+      process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+    if (
+      turnUrls.length > 0 &&
+      turnUsername &&
+      turnCredential
+    ) {
+      iceServers.push({
+        urls: turnUrls,
+        username: turnUsername,
+        credential: turnCredential,
+      });
+    } else {
+      console.warn(
+        "[ASTRO][ICE] TURN credentials are not configured. Using STUN only."
+      );
+    }
+
+    return iceServers;
+  }, []);
+
+  // =====================================================
   // CREATE PEER CONNECTION
   // =====================================================
 
@@ -361,58 +526,18 @@ const Calling = () => {
         return peerConnectionRef.current;
       }
 
+      const iceServers = getIceServers();
+
       const iceConfig = {
-        iceServers: [
-          // Google STUN
-
-          {
-            urls: "stun:stun.l.google.com:19302",
-          },
-
-          {
-            urls: "stun:stun1.l.google.com:19302",
-          },
-
-          {
-            urls: "stun:stun2.l.google.com:19302",
-          },
-
-          // Metered OpenRelay STUN
-
-          {
-            urls: "stun:openrelay.metered.ca:80",
-          },
-
-          // Metered OpenRelay TURN UDP
-
-          {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-
-          {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-
-          // Metered OpenRelay TURN TCP
-
-          {
-            urls: "turn:openrelay.metered.ca:443?transport=tcp",
-            username: "openrelayproject",
-            credential: "openrelayproject",
-          },
-        ],
+        iceServers,
 
         iceCandidatePoolSize: 10,
         bundlePolicy: "max-bundle",
         rtcpMuxPolicy: "require",
 
-        // For normal production testing, use "all".
-        // Temporarily change to "relay" on BOTH peers
-        // to test whether TURN is working.
+        // Normal production setting.
+        // For a temporary TURN test, change to "relay"
+        // on BOTH user and astrologer clients.
         iceTransportPolicy: "all",
       };
 
@@ -420,14 +545,19 @@ const Calling = () => {
 
       peerConnectionRef.current = pc;
 
-      console.log("[ASTRO][RTC] PeerConnection created:", {
-        roomId,
-        iceServers: iceConfig.iceServers.map(
-          (server) => server.urls
-        ),
-        pendingCandidates:
-          pendingIceCandidatesRef.current.length,
-      });
+      console.log(
+        "[ASTRO][RTC] PeerConnection created:",
+        {
+          roomId,
+          iceServers: iceServers.map(
+            (server) => server.urls
+          ),
+          iceTransportPolicy:
+            iceConfig.iceTransportPolicy,
+          pendingCandidates:
+            pendingIceCandidatesRef.current.length,
+        }
+      );
 
       // =================================================
       // ADD LOCAL AUDIO TRACKS
@@ -443,6 +573,7 @@ const Calling = () => {
               "[ASTRO][RTC] Local audio track added:",
               {
                 enabled: track.enabled,
+                muted: track.muted,
                 readyState: track.readyState,
               }
             );
@@ -454,15 +585,19 @@ const Calling = () => {
       // =================================================
 
       pc.ontrack = async (event) => {
-        console.log("[ASTRO][RTC] Remote track received:", {
-          kind: event.track.kind,
-          readyState: event.track.readyState,
-          streams: event.streams.length,
-        });
+        console.log(
+          "[ASTRO][RTC] Remote track received:",
+          {
+            kind: event.track.kind,
+            readyState: event.track.readyState,
+            muted: event.track.muted,
+            streams: event.streams.length,
+          }
+        );
 
         let stream = event.streams?.[0];
 
-        // Fallback when event.streams is empty.
+        // Fallback if the browser does not provide a stream.
 
         if (!stream) {
           stream = new MediaStream([event.track]);
@@ -472,24 +607,51 @@ const Calling = () => {
 
         if (remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = stream;
+          remoteAudioRef.current.muted = false;
+          remoteAudioRef.current.volume = 1;
 
           try {
             await remoteAudioRef.current.play();
 
+            setNeedsAudioGesture(false);
+
             console.log(
-              "[ASTRO][RTC] Remote audio playback started"
+              "[ASTRO][AUDIO] Remote audio playback started"
             );
           } catch (error) {
-            console.error(
-              "[ASTRO][RTC] Remote audio autoplay blocked:",
+            console.warn(
+              "[ASTRO][AUDIO] Remote audio autoplay blocked:",
               error
             );
+
+            setNeedsAudioGesture(true);
           }
         }
 
+        // Track can initially arrive muted and become
+        // unmuted when media starts flowing.
+
+        event.track.onunmute = () => {
+          console.log(
+            "[ASTRO][AUDIO] Remote audio track is now unmuted"
+          );
+        };
+
+        event.track.onmute = () => {
+          console.warn(
+            "[ASTRO][AUDIO] Remote audio track became muted"
+          );
+        };
+
+        event.track.onended = () => {
+          console.warn(
+            "[ASTRO][AUDIO] Remote audio track ended"
+          );
+        };
+
         // IMPORTANT:
-        // Do not set callState to connected here.
-        // Wait for ICE connection state to become connected.
+        // ontrack does not mean the call is connected.
+        // Wait for ICE connection state.
       };
 
       // =================================================
@@ -498,20 +660,33 @@ const Calling = () => {
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const candidateJSON = event.candidate.toJSON();
+          const candidateJSON =
+            event.candidate.toJSON();
+
+          const candidateString =
+            candidateJSON.candidate || "";
 
           const candidateType =
-            candidateJSON.candidate?.match(/\btyp\s+(\w+)/)?.[1];
+            candidateString.match(
+              /\btyp\s+(\w+)/
+            )?.[1] || "unknown";
 
-          console.log("[ASTRO][ICE] Sending candidate:", {
-            candidateType,
-            candidate: candidateJSON.candidate,
-          });
+          const protocol =
+            candidateString.match(
+              /\b(udp|tcp)\b/i
+            )?.[1] || "unknown";
+
+          console.log(
+            "[ASTRO][ICE] Sending candidate:",
+            {
+              candidateType,
+              protocol,
+              candidate: candidateString,
+            }
+          );
 
           socketRef.current?.emit("ice-candidate", {
             room_id: roomId,
-
-            // Always serialize candidate before sending.
             candidate: candidateJSON,
           });
         } else {
@@ -526,13 +701,16 @@ const Calling = () => {
       // =================================================
 
       pc.onicecandidateerror = (event) => {
-        console.error("[ASTRO][ICE] Candidate error:", {
-          url: event.url,
-          errorCode: event.errorCode,
-          errorText: event.errorText,
-          address: event.address,
-          port: event.port,
-        });
+        console.error(
+          "[ASTRO][ICE] Candidate error:",
+          {
+            url: event.url,
+            errorCode: event.errorCode,
+            errorText: event.errorText,
+            address: event.address,
+            port: event.port,
+          }
+        );
       };
 
       // =================================================
@@ -630,7 +808,98 @@ const Calling = () => {
 
       return pc;
     },
-    [startStatsMonitoring, stopStatsMonitoring]
+    [
+      getIceServers,
+      startStatsMonitoring,
+      stopStatsMonitoring,
+    ]
+  );
+
+  // =====================================================
+  // ADD REMOTE ICE CANDIDATE
+  // =====================================================
+
+  const addRemoteIceCandidate = useCallback(
+    async (pc, candidate) => {
+      if (!pc || !candidate) {
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
+
+        const candidateString =
+          candidate.candidate || "";
+
+        const candidateType =
+          candidateString.match(
+            /\btyp\s+(\w+)/
+          )?.[1] || "unknown";
+
+        const protocol =
+          candidateString.match(
+            /\b(udp|tcp)\b/i
+          )?.[1] || "unknown";
+
+        console.log(
+          "[ASTRO][ICE] Remote candidate added successfully:",
+          {
+            candidateType,
+            protocol,
+          }
+        );
+      } catch (error) {
+        console.error(
+          "[ASTRO][ICE] Failed to add remote candidate:",
+          error,
+          candidate
+        );
+      }
+    },
+    []
+  );
+
+  // =====================================================
+  // DRAIN PENDING ICE CANDIDATES
+  // =====================================================
+
+  const drainPendingIceCandidates = useCallback(
+    async (pc) => {
+      if (!pc?.remoteDescription) {
+        console.warn(
+          "[ASTRO][ICE] Cannot drain candidates: remote description missing"
+        );
+
+        return;
+      }
+
+      const queuedCandidates =
+        pendingIceCandidatesRef.current.splice(0);
+
+      console.log(
+        "[ASTRO][ICE] Draining queued candidates:",
+        queuedCandidates.length
+      );
+
+      for (const candidate of queuedCandidates) {
+        if (pc !== peerConnectionRef.current) {
+          console.warn(
+            "[ASTRO][ICE] PeerConnection changed; stopping candidate drain"
+          );
+
+          return;
+        }
+
+        await addRemoteIceCandidate(pc, candidate);
+      }
+
+      console.log(
+        "[ASTRO][ICE] Candidate queue drained"
+      );
+    },
+    [addRemoteIceCandidate]
   );
 
   // =====================================================
@@ -658,12 +927,30 @@ const Calling = () => {
         return;
       }
 
+      // Close any stale peer connection.
+
       if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
+        const oldPc = peerConnectionRef.current;
+
+        oldPc.ontrack = null;
+        oldPc.onicecandidate = null;
+        oldPc.onicecandidateerror = null;
+        oldPc.oniceconnectionstatechange = null;
+        oldPc.onconnectionstatechange = null;
+        oldPc.onsignalingstatechange = null;
+        oldPc.onicegatheringstatechange = null;
+
+        oldPc.close();
+
         peerConnectionRef.current = null;
       }
 
       pendingIceCandidatesRef.current = [];
+      processingOfferRef.current = false;
+      lastOfferSdpRef.current = null;
+
+      setRemoteAudioStream(null);
+      setNeedsAudioGesture(false);
 
       setCallState("connecting");
 
@@ -680,97 +967,6 @@ const Calling = () => {
   );
 
   // =====================================================
-  // RESTORE ACTIVE CALL FROM LOCAL STORAGE
-  // =====================================================
-
-  useEffect(() => {
-    if (!socket || !astroId || !activeCallKey) {
-      return;
-    }
-
-    console.log(
-      "[ASTRO][CALL] Checking saved active call:",
-      activeCallKey
-    );
-
-    const savedCall = localStorage.getItem(activeCallKey);
-
-    if (!savedCall) {
-      console.log(
-        "[ASTRO][CALL] No saved active call found"
-      );
-
-      return;
-    }
-
-    try {
-      const call = JSON.parse(savedCall);
-
-      if (
-        !call?.roomId ||
-        call.status !== "active" ||
-        call.astroId !== astroId
-      ) {
-        localStorage.removeItem(activeCallKey);
-        return;
-      }
-
-      const elapsedSeconds = Math.floor(
-        (Date.now() - call.startedAt) / 1000
-      );
-
-      const remainingTime = Math.max(
-        call.callTime - elapsedSeconds,
-        0
-      );
-
-      if (remainingTime <= 0) {
-        console.log(
-          "[ASTRO][CALL] Saved call has expired"
-        );
-
-        localStorage.removeItem(activeCallKey);
-        return;
-      }
-
-      const restoredRequest = {
-        room_id: call.roomId,
-        userName: call.callerName || "Client",
-        callTime: remainingTime,
-      };
-
-      currentRequestRef.current = restoredRequest;
-
-      setCurrentRequest(restoredRequest);
-
-      setCallerName(call.callerName || "Client");
-
-      setCallTime(remainingTime);
-
-      hasEndedRef.current = false;
-      isCallActiveRef.current = true;
-      isUnmountingRef.current = false;
-
-      console.log(
-        "[ASTRO][CALL] Restoring active call:",
-        {
-          roomId: call.roomId,
-          remainingTime,
-        }
-      );
-
-      reconnectCall(call.roomId);
-    } catch (error) {
-      console.error(
-        "[ASTRO][CALL] Failed to restore call:",
-        error
-      );
-
-      localStorage.removeItem(activeCallKey);
-    }
-  }, [socket, astroId, activeCallKey, reconnectCall]);
-
-  // =====================================================
   // SOCKET EVENTS
   // =====================================================
 
@@ -778,6 +974,8 @@ const Calling = () => {
     if (!socket || !astroId) {
       return;
     }
+
+    socketRef.current = socket;
 
     // Initialize microphone in advance.
     initMedia();
@@ -791,6 +989,17 @@ const Calling = () => {
         return;
       }
 
+      if (
+        isCallActiveRef.current &&
+        !hasEndedRef.current
+      ) {
+        console.warn(
+          "[ASTRO][CALL] Already handling an active call. Ignoring incoming call."
+        );
+
+        return;
+      }
+
       console.log(
         "[ASTRO][CALL] Incoming call:",
         data
@@ -801,6 +1010,8 @@ const Calling = () => {
       isUnmountingRef.current = false;
 
       pendingIceCandidatesRef.current = [];
+      processingOfferRef.current = false;
+      lastOfferSdpRef.current = null;
 
       currentRequestRef.current = data;
 
@@ -811,7 +1022,10 @@ const Calling = () => {
       setCallState("ringing");
 
       // Incoming call time is in minutes.
-      setCallTime((data.callTime || 0) * 60);
+
+      setCallTime(
+        Math.max(0, Number(data.callTime) || 0) * 60
+      );
 
       if (ringtoneRef.current) {
         ringtoneRef.current.currentTime = 0;
@@ -830,15 +1044,18 @@ const Calling = () => {
     // =================================================
 
     const handleOffer = async (data) => {
+      const roomId = data?.room_id;
+      const offer = data?.offer;
+
       try {
         if (
-          data?.room_id !==
+          roomId !==
           currentRequestRef.current?.room_id
         ) {
           console.warn(
             "[ASTRO][SDP] Ignoring offer for another room:",
             {
-              receivedRoomId: data?.room_id,
+              receivedRoomId: roomId,
               currentRoomId:
                 currentRequestRef.current?.room_id,
             }
@@ -847,7 +1064,7 @@ const Calling = () => {
           return;
         }
 
-        if (!data?.offer) {
+        if (!offer) {
           console.error(
             "[ASTRO][SDP] Offer is missing"
           );
@@ -855,36 +1072,68 @@ const Calling = () => {
           return;
         }
 
-        console.log(
-          "[ASTRO][SDP] Processing offer:",
-          data.room_id
-        );
-
-        // Make sure microphone is ready before creating PC.
-        const stream = await initMedia();
-
-        if (!stream) {
-          console.error(
-            "[ASTRO][SDP] Cannot process offer without microphone"
+        if (processingOfferRef.current) {
+          console.warn(
+            "[ASTRO][SDP] Another offer is already being processed"
           );
 
           return;
         }
 
-        const pc = createPeerConnection(data.room_id);
+        if (
+          lastOfferSdpRef.current &&
+          lastOfferSdpRef.current === offer.sdp
+        ) {
+          console.warn(
+            "[ASTRO][SDP] Duplicate offer ignored"
+          );
+
+          return;
+        }
+
+        processingOfferRef.current = true;
+
+        console.log(
+          "[ASTRO][SDP] Processing offer:",
+          roomId
+        );
+
+        // Microphone must be ready before creating PC.
+
+        const stream = await initMedia();
+
+        if (!stream) {
+          throw new Error(
+            "Cannot process offer without microphone"
+          );
+        }
+
+        const pc = createPeerConnection(roomId);
 
         console.log(
           "[ASTRO][SDP] Received offer:",
           {
-            roomId: data.room_id,
-            offerType: data.offer.type,
+            roomId,
+            offerType: offer.type,
             signalingStateBefore: pc.signalingState,
           }
         );
 
-        // Apply remote offer.
+        // If this peer connection already has a remote
+        // description, avoid applying the same offer again.
+
+        if (pc.remoteDescription?.type === "offer") {
+          console.warn(
+            "[ASTRO][SDP] Remote offer already applied"
+          );
+
+          return;
+        }
+
+        // Apply remote offer first.
+
         await pc.setRemoteDescription(
-          new RTCSessionDescription(data.offer)
+          new RTCSessionDescription(offer)
         );
 
         console.log(
@@ -898,34 +1147,11 @@ const Calling = () => {
           }
         );
 
-        // =================================================
-        // DRAIN QUEUED ICE CANDIDATES
-        // =================================================
+        // Now it is safe to add queued ICE candidates.
 
-        const queuedCandidates =
-          pendingIceCandidatesRef.current.splice(0);
+        await drainPendingIceCandidates(pc);
 
-        for (const candidate of queuedCandidates) {
-          try {
-            await pc.addIceCandidate(
-              new RTCIceCandidate(candidate)
-            );
-
-            console.log(
-              "[ASTRO][ICE] Queued candidate added successfully"
-            );
-          } catch (iceError) {
-            console.error(
-              "[ASTRO][ICE] Failed to add queued candidate:",
-              iceError,
-              candidate
-            );
-          }
-        }
-
-        // =================================================
-        // CREATE ANSWER
-        // =================================================
+        // Create and apply local answer.
 
         const answer = await pc.createAnswer();
 
@@ -934,25 +1160,33 @@ const Calling = () => {
         console.log(
           "[ASTRO][SDP] Local answer created:",
           {
-            roomId: data.room_id,
+            roomId,
             signalingState: pc.signalingState,
             sdpType: pc.localDescription?.type,
           }
         );
 
-        socket.emit("answer", {
-          room_id: data.room_id,
+        // Emit the answer to the user.
+
+        socketRef.current?.emit("answer", {
+          room_id: roomId,
           answer: pc.localDescription,
         });
+
+        lastOfferSdpRef.current = offer.sdp;
 
         console.log(
           "[ASTRO][SDP] Answer emitted successfully"
         );
       } catch (error) {
+        lastOfferSdpRef.current = null;
+
         console.error(
           "[ASTRO][SDP] Offer processing failed:",
           error
         );
+      } finally {
+        processingOfferRef.current = false;
       }
     };
 
@@ -988,16 +1222,25 @@ const Calling = () => {
 
         const pc = peerConnectionRef.current;
 
-        // Queue candidate until remote offer is applied.
+        // Queue candidates until remote offer is applied.
+
         if (!pc || !pc.remoteDescription) {
           pendingIceCandidatesRef.current.push(
             data.candidate
           );
 
+          const candidateString =
+            data.candidate.candidate || "";
+
           const candidateType =
-            data.candidate.candidate?.match(
+            candidateString.match(
               /\btyp\s+(\w+)/
-            )?.[1];
+            )?.[1] || "unknown";
+
+          const protocol =
+            candidateString.match(
+              /\b(udp|tcp)\b/i
+            )?.[1] || "unknown";
 
           console.log(
             "[ASTRO][ICE] Candidate queued:",
@@ -1009,30 +1252,20 @@ const Calling = () => {
               queueLength:
                 pendingIceCandidatesRef.current.length,
               candidateType,
+              protocol,
             }
           );
 
           return;
         }
 
-        await pc.addIceCandidate(
-          new RTCIceCandidate(data.candidate)
-        );
-
-        const candidateType =
-          data.candidate.candidate?.match(
-            /\btyp\s+(\w+)/
-          )?.[1];
-
-        console.log(
-          "[ASTRO][ICE] Remote candidate added:",
-          {
-            candidateType,
-          }
+        await addRemoteIceCandidate(
+          pc,
+          data.candidate
         );
       } catch (error) {
         console.error(
-          "[ASTRO][ICE] Failed to add remote candidate:",
+          "[ASTRO][ICE] Failed to process remote candidate:",
           error,
           data?.candidate
         );
@@ -1138,7 +1371,10 @@ const Calling = () => {
 
     socket.on("offer", handleOffer);
 
-    socket.on("ice-candidate", handleIceCandidate);
+    socket.on(
+      "ice-candidate",
+      handleIceCandidate
+    );
 
     socket.on(
       "call_ended_by_user",
@@ -1160,7 +1396,10 @@ const Calling = () => {
     // =================================================
 
     return () => {
-      socket.off("incoming_call", handleIncomingCall);
+      socket.off(
+        "incoming_call",
+        handleIncomingCall
+      );
 
       socket.off("offer", handleOffer);
 
@@ -1190,7 +1429,109 @@ const Calling = () => {
     activeCallKey,
     initMedia,
     createPeerConnection,
+    drainPendingIceCandidates,
+    addRemoteIceCandidate,
     cleanupCall,
+  ]);
+
+  // =====================================================
+  // RESTORE ACTIVE CALL FROM LOCAL STORAGE
+  // =====================================================
+
+  useEffect(() => {
+    if (!socket || !astroId || !activeCallKey) {
+      return;
+    }
+
+    console.log(
+      "[ASTRO][CALL] Checking saved active call:",
+      activeCallKey
+    );
+
+    const savedCall =
+      localStorage.getItem(activeCallKey);
+
+    if (!savedCall) {
+      console.log(
+        "[ASTRO][CALL] No saved active call found"
+      );
+
+      return;
+    }
+
+    try {
+      const call = JSON.parse(savedCall);
+
+      if (
+        !call?.roomId ||
+        call.status !== "active" ||
+        call.astroId !== astroId
+      ) {
+        localStorage.removeItem(activeCallKey);
+        return;
+      }
+
+      const elapsedSeconds = Math.floor(
+        (Date.now() - call.startedAt) / 1000
+      );
+
+      const remainingTime = Math.max(
+        Number(call.callTime || 0) - elapsedSeconds,
+        0
+      );
+
+      if (remainingTime <= 0) {
+        console.log(
+          "[ASTRO][CALL] Saved call has expired"
+        );
+
+        localStorage.removeItem(activeCallKey);
+        return;
+      }
+
+      const restoredRequest = {
+        room_id: call.roomId,
+        userName: call.callerName || "Client",
+        callTime: remainingTime,
+      };
+
+      currentRequestRef.current = restoredRequest;
+
+      setCurrentRequest(restoredRequest);
+
+      setCallerName(call.callerName || "Client");
+
+      setCallTime(remainingTime);
+
+      hasEndedRef.current = false;
+      isCallActiveRef.current = true;
+      isUnmountingRef.current = false;
+
+      console.log(
+        "[ASTRO][CALL] Restoring active call:",
+        {
+          roomId: call.roomId,
+          remainingTime,
+        }
+      );
+
+      // Socket event listeners have already been
+      // registered by the effect above.
+
+      reconnectCall(call.roomId);
+    } catch (error) {
+      console.error(
+        "[ASTRO][CALL] Failed to restore call:",
+        error
+      );
+
+      localStorage.removeItem(activeCallKey);
+    }
+  }, [
+    socket,
+    astroId,
+    activeCallKey,
+    reconnectCall,
   ]);
 
   // =====================================================
@@ -1216,6 +1557,7 @@ const Calling = () => {
       );
 
       // Ensure microphone is ready.
+
       const stream = await initMedia();
 
       if (!stream) {
@@ -1231,6 +1573,8 @@ const Calling = () => {
       isCallActiveRef.current = true;
 
       pendingIceCandidatesRef.current = [];
+      processingOfferRef.current = false;
+      lastOfferSdpRef.current = null;
 
       const duration = callTime;
 
@@ -1259,6 +1603,7 @@ const Calling = () => {
       stopRingtone();
 
       // Join socket room.
+
       socket.emit("join_call", {
         roomId,
       });
@@ -1271,6 +1616,7 @@ const Calling = () => {
       setCallState("connecting");
 
       // Notify caller after joining.
+
       setTimeout(() => {
         if (
           isUnmountingRef.current ||
@@ -1280,11 +1626,14 @@ const Calling = () => {
           return;
         }
 
-        socket.emit("callAcceptedByAstrologer", {
-          roomId,
-          astroId,
-          callTime: duration,
-        });
+        socketRef.current?.emit(
+          "callAcceptedByAstrologer",
+          {
+            roomId,
+            astroId,
+            callTime: duration,
+          }
+        );
 
         console.log(
           "[ASTRO][CALL] Acceptance event emitted"
@@ -1413,10 +1762,13 @@ const Calling = () => {
 
     stopRingtone();
 
-    socket.emit("call_cancel_by_astrologer", {
-      roomId,
-      astroId,
-    });
+    socket.emit(
+      "call_cancel_by_astrologer",
+      {
+        roomId,
+        astroId,
+      }
+    );
 
     cleanupCall();
   };
@@ -1469,7 +1821,6 @@ const Calling = () => {
       !remoteAudioStream
     ) {
       setWaveHeights(Array(20).fill(10));
-
       return;
     }
 
@@ -1572,21 +1923,34 @@ const Calling = () => {
         "[ASTRO] CALLING COMPONENT UNMOUNTED"
       );
 
-      // IMPORTANT:
       // Do not emit call_ended_by_astrologer here.
-      // Refreshing or navigating away should not end the
-      // server-side call automatically.
+      // Refreshing or navigating away should not end
+      // the server-side call automatically.
 
       isUnmountingRef.current = true;
       isCallActiveRef.current = false;
 
       stopStatsMonitoring();
+      stopRingtone();
 
       if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
+        const pc = peerConnectionRef.current;
+
+        pc.ontrack = null;
+        pc.onicecandidate = null;
+        pc.onicecandidateerror = null;
+        pc.oniceconnectionstatechange = null;
+        pc.onconnectionstatechange = null;
+        pc.onsignalingstatechange = null;
+        pc.onicegatheringstatechange = null;
+
+        pc.close();
 
         peerConnectionRef.current = null;
       }
+
+      pendingIceCandidatesRef.current = [];
+      processingOfferRef.current = false;
 
       if (localStreamRef.current) {
         localStreamRef.current
@@ -1605,7 +1969,7 @@ const Calling = () => {
         ringtoneRef.current.pause();
       }
     };
-  }, [stopStatsMonitoring]);
+  }, [stopStatsMonitoring, stopRingtone]);
 
   // =====================================================
   // UI
@@ -1631,7 +1995,6 @@ const Calling = () => {
       />
 
       <AnimatePresence mode="wait">
-
         {/* ========================================= */}
         {/* RINGING SCREEN */}
         {/* ========================================= */}
@@ -1645,7 +2008,6 @@ const Calling = () => {
             className="fixed inset-0 z-[100] bg-black/95 gap-12 flex items-center justify-center"
           >
             <div className="text-center">
-
               <motion.div
                 animate={{
                   scale: [1, 1.08, 1],
@@ -1668,7 +2030,6 @@ const Calling = () => {
               </p>
 
               <div className="flex justify-center gap-12 mt-16">
-
                 {/* Reject */}
 
                 <motion.button
@@ -1694,7 +2055,6 @@ const Calling = () => {
                     className="text-white"
                   />
                 </motion.button>
-
               </div>
             </div>
           </motion.div>
@@ -1712,7 +2072,6 @@ const Calling = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] gap-12 bg-gradient-to-br from-gray-950 to-black flex flex-col items-center justify-center text-white"
           >
-
             <div className="w-28 h-28 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center mb-6">
               <User size={60} />
             </div>
@@ -1725,6 +2084,15 @@ const Calling = () => {
               Please wait
             </p>
 
+            {needsAudioGesture && (
+              <button
+                type="button"
+                onClick={enableRemoteAudio}
+                className="mt-6 rounded-lg bg-green-600 px-5 py-3 text-white hover:bg-green-700"
+              >
+                Tap to enable audio
+              </button>
+            )}
           </motion.div>
         )}
 
@@ -1739,15 +2107,11 @@ const Calling = () => {
             animate={{ opacity: 1 }}
             className="fixed inset-0 z-[100] bg-gradient-to-br from-gray-950 via-purple-950 to-black flex flex-col items-center justify-center text-white"
           >
-
             <div className="md:w-3/5 overflow-hidden w-full shadow-lg rounded-3xl flex flex-col md:h-[95vh] h-[100vh]">
-
               <div className="flex flex-col w-full rounded-3xl shadow-xl items-center justify-between py-10 h-full bg-gray-900 text-white">
-
                 {/* Caller Information */}
 
                 <div className="flex flex-col items-center">
-
                   <motion.div
                     animate={{
                       scale: [1, 1.05, 1],
@@ -1762,27 +2126,20 @@ const Calling = () => {
                   </motion.div>
 
                   <div className="flex items-center gap-2 mt-4 text-green-400">
-
                     <span className="w-3 h-3 bg-green-400 rounded-full animate-pulse" />
-
                     Connected
-
                   </div>
-
                 </div>
 
                 {/* Call Timer */}
 
                 <div className="mt-12 flex items-center gap-3 text-xl font-mono">
-
                   Time Left: {formatTime(callTime)}
-
                 </div>
 
                 {/* Voice Waveform */}
 
                 <div className="flex items-end justify-center gap-1 h-20 mt-4">
-
                   {waveHeights.map((height, index) => (
                     <div
                       key={index}
@@ -1792,13 +2149,23 @@ const Calling = () => {
                       }}
                     />
                   ))}
-
                 </div>
+
+                {/* Autoplay fallback */}
+
+                {needsAudioGesture && (
+                  <button
+                    type="button"
+                    onClick={enableRemoteAudio}
+                    className="rounded-lg bg-green-600 px-5 py-3 text-white hover:bg-green-700"
+                  >
+                    Tap to enable audio
+                  </button>
+                )}
 
                 {/* Call Controls */}
 
                 <div className="flex gap-8">
-
                   {/* Mute */}
 
                   <motion.button
@@ -1822,18 +2189,15 @@ const Calling = () => {
                   >
                     <PhoneOff size={42} />
                   </motion.button>
-
                 </div>
 
                 <p className="absolute bottom-6 text-xs text-gray-500">
                   This call may be recorded for quality purposes
                 </p>
-
               </div>
             </div>
           </motion.div>
         )}
-
       </AnimatePresence>
     </>
   );
