@@ -19,6 +19,8 @@ const Calling = () => {
   const remoteAudioRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
+  // ICE candidates can arrive before the offer/remote description.
+  const pendingIceCandidatesRef = useRef([]);
   const stopRingtone = () => {
     const ringtone = ringtoneRef.current;
 
@@ -175,48 +177,35 @@ const Calling = () => {
   const createPeerConnection = (roomId) => {
     if (peerConnectionRef.current) return peerConnectionRef.current;
 
-    // const iceConfig = {
-    //   iceServers: [
-    //     { urls: "stun:stun.l.google.com:19302" },
-    //     { urls: "stun:stun1.l.google.com:19302" },
-    //     { urls: "stun:stun2.l.google.com:19302" },
-    //     {
-    //       urls: "turn:openrelay.metered.ca:80",
-    //       username: "openrelayproject",
-    //       credential: "openrelayproject",
-    //     },
-    //     {
-    //       urls: "turn:openrelay.metered.ca:443",
-    //       username: "openrelayproject",
-    //       credential: "openrelayproject",
-    //     },
-    //   ],
-    //   iceCandidatePoolSize: 10,
-    // };
-
-    
     const iceConfig = {
       iceServers: [
-        // STUN — keep these
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-
-        // TURN — the actual relay; MUST be a working server
+        { urls: "stun:stun2.l.google.com:19302" },
         {
-          urls: [
-            "turn:turn.staging.dhwaniastro.com:3478?transport=udp",
-            "turn:turn.staging.dhwaniastro.com:3478?transport=tcp",
-            "turns:turn.staging.dhwaniastro.com:5349",
-          ],
-          username: "webrtc",
-          credential: "yourStrongPassword",
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
         },
       ],
       iceCandidatePoolSize: 10,
     };
 
+
+    
+
     const pc = new RTCPeerConnection(iceConfig);
     peerConnectionRef.current = pc;
+    console.log("[ASTRO][RTC] PeerConnection created", {
+      roomId,
+      iceServers: iceConfig.iceServers.map((server) => server.urls),
+      pendingCandidates: pendingIceCandidatesRef.current.length,
+    });
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
@@ -240,18 +229,42 @@ const Calling = () => {
 
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
+        console.log("[ASTRO][ICE] Sending candidate:", {
+          type: event.candidate.type,
+          protocol: event.candidate.protocol,
+          address: event.candidate.address,
+          port: event.candidate.port,
+          candidate: event.candidate.candidate,
+        });
         socket.emit("ice-candidate", {
           room_id: roomId,
           candidate: event.candidate,
         });
+      } else if (!event.candidate) {
+        console.log("[ASTRO][ICE] ICE candidate gathering completed");
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log("🧊 ICE State (Astro):", pc.iceConnectionState);
+      console.log("[ASTRO][RTC] iceConnectionState:", pc.iceConnectionState);
     };
     pc.onconnectionstatechange = () => {
-      console.log("🔥 Connection State (Astro):", pc.connectionState);
+      console.log("[ASTRO][RTC] connectionState:", pc.connectionState);
+    };
+    pc.onsignalingstatechange = () => {
+      console.log("[ASTRO][RTC] signalingState:", pc.signalingState);
+    };
+    pc.onicegatheringstatechange = () => {
+      console.log("[ASTRO][RTC] iceGatheringState:", pc.iceGatheringState);
+    };
+    pc.onicecandidateerror = (event) => {
+      console.error("[ASTRO][RTC] ICE candidate error:", {
+        url: event.url,
+        errorCode: event.errorCode,
+        errorText: event.errorText,
+        address: event.address,
+        port: event.port,
+      });
     };
 
     return pc;
@@ -353,20 +366,54 @@ const Calling = () => {
     socket.on("offer", async (data) => {
       try {
         if (data.room_id !== currentRequestRef.current?.room_id) {
+          console.warn("[ASTRO][SDP] Ignoring offer for another room:", {
+            receivedRoomId: data.room_id,
+            currentRoomId: currentRequestRef.current?.room_id,
+          });
           return;
         }
 
+        console.log("[ASTRO][SDP] Processing offer for room:", data.room_id);
         const pc = createPeerConnection(data.room_id);
 
+        console.log("[ASTRO][SDP] Offer received:", {
+          roomId: data.room_id,
+          offerType: data.offer?.type,
+          signalingStateBefore: pc.signalingState,
+        });
+
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+        console.log("[ASTRO][SDP] Remote offer applied:", {
+          signalingState: pc.signalingState,
+          remoteDescriptionType: pc.remoteDescription?.type,
+          queuedCandidates: pendingIceCandidatesRef.current.length,
+        });
+
+        // Apply ICE candidates received before the remote offer was set.
+        const queuedCandidates = pendingIceCandidatesRef.current.splice(0);
+        for (const candidate of queuedCandidates) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+            console.log("[ASTRO][ICE] Queued candidate added successfully");
+          } catch (iceError) {
+            console.error("[ASTRO][ICE] Failed to add queued candidate:", iceError, candidate);
+          }
+        }
 
         const answer = await pc.createAnswer();
 
         await pc.setLocalDescription(answer);
 
+        console.log("[ASTRO][SDP] Local answer set; sending answer:", {
+          roomId: data.room_id,
+          signalingState: pc.signalingState,
+          sdpType: pc.localDescription?.type,
+        });
+
         socket.emit("answer", {
           room_id: data.room_id,
-          answer,
+          answer: pc.localDescription,
         });
       } catch (err) {
         console.error("❌ Offer Error:", err);
@@ -376,16 +423,38 @@ const Calling = () => {
     socket.on("ice-candidate", async (data) => {
       try {
         if (data?.room_id !== currentRequestRef.current?.room_id) {
+          console.warn("[ASTRO][ICE] Ignoring candidate for another room:", {
+            receivedRoomId: data?.room_id,
+            currentRoomId: currentRequestRef.current?.room_id,
+          });
           return;
         }
 
-        if (peerConnectionRef.current && data.candidate) {
-          await peerConnectionRef.current.addIceCandidate(
-            new RTCIceCandidate(data.candidate),
-          );
+        if (!data?.candidate) {
+          console.warn("[ASTRO][ICE] Empty candidate received");
+          return;
         }
+
+        const pc = peerConnectionRef.current;
+        if (!pc || !pc.remoteDescription) {
+          pendingIceCandidatesRef.current.push(data.candidate);
+          console.log("[ASTRO][ICE] Candidate queued until remote offer is applied:", {
+            peerConnectionReady: Boolean(pc),
+            remoteDescriptionReady: Boolean(pc?.remoteDescription),
+            queueLength: pendingIceCandidatesRef.current.length,
+            candidateType: data.candidate.type,
+            protocol: data.candidate.protocol,
+          });
+          return;
+        }
+
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log("[ASTRO][ICE] Remote candidate added successfully:", {
+          candidateType: data.candidate.type,
+          protocol: data.candidate.protocol,
+        });
       } catch (err) {
-        console.error("❌ ICE Error:", err);
+        console.error("[ASTRO][ICE] Failed to add remote candidate:", err, data?.candidate);
       }
     });
 
@@ -450,6 +519,8 @@ const Calling = () => {
     hasEndedRef.current = false;
     isUnmountingRef.current = false;
     isCallActiveRef.current = true;
+    pendingIceCandidatesRef.current = [];
+    console.log("[ASTRO][CALL] Accepting call; ICE queue cleared:", roomId);
 
     const duration = callTime;
 
@@ -539,6 +610,8 @@ const Calling = () => {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
+    pendingIceCandidatesRef.current = [];
+    console.log("[ASTRO][CALL] PeerConnection closed and ICE queue cleared");
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
