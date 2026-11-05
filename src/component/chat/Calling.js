@@ -388,9 +388,6 @@ const Calling = () => {
         }
       });
 
-      // Some browsers expose the selected pair through
-      // the transport report.
-
       if (transportSelectedPairId) {
         selectedPair =
           stats.get(transportSelectedPairId) ||
@@ -460,10 +457,11 @@ const Calling = () => {
 
   // =====================================================
   // BUILD ICE SERVER CONFIGURATION
+  // METERED TURN + GOOGLE STUN FALLBACK
   // =====================================================
 
-  const getIceServers = useCallback(() => {
-    const iceServers = [
+  const getIceServers = useCallback(async () => {
+    const fallbackIceServers = [
       {
         urls: "stun:stun.l.google.com:19302",
       },
@@ -472,48 +470,66 @@ const Calling = () => {
       },
     ];
 
-    /*
-      Configure these environment variables in the
-      astrologer frontend:
-
-      NEXT_PUBLIC_TURN_URLS=turn:YOUR_HOST:3478?transport=udp,turns:YOUR_HOST:5349?transport=tcp
-      NEXT_PUBLIC_TURN_USERNAME=YOUR_USERNAME
-      NEXT_PUBLIC_TURN_CREDENTIAL=YOUR_CREDENTIAL
-
-      Use the actual URLs and credentials from your TURN
-      provider. Do not assume the example values are valid.
-    */
-
-    const turnUrls = (
-      process.env.NEXT_PUBLIC_TURN_URLS || ""
-    )
-      .split(",")
-      .map((url) => url.trim())
-      .filter(Boolean);
-
-    const turnUsername =
-      process.env.NEXT_PUBLIC_TURN_USERNAME;
-
-    const turnCredential =
-      process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
-
-    if (
-      turnUrls.length > 0 &&
-      turnUsername &&
-      turnCredential
-    ) {
-      iceServers.push({
-        urls: turnUrls,
-        username: turnUsername,
-        credential: turnCredential,
-      });
-    } else {
-      console.warn(
-        "[ASTRO][ICE] TURN credentials are not configured. Using STUN only."
+    try {
+      console.log(
+        "[ASTRO][ICE] Fetching Metered TURN credentials..."
       );
-    }
 
-    return iceServers;
+      const response = await fetch(
+        "/api/turn-credentials",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `TURN API returned HTTP ${response.status}`
+        );
+      }
+
+      const result = await response.json();
+
+      if (
+        !result?.success ||
+        !Array.isArray(result.iceServers) ||
+        result.iceServers.length === 0
+      ) {
+        throw new Error(
+          result?.message ||
+            "Invalid Metered TURN credentials response"
+        );
+      }
+
+      // Keep Google STUN and add Metered ICE servers.
+
+      const iceServers = [
+        ...fallbackIceServers,
+        ...result.iceServers,
+      ];
+
+      console.log(
+        "[ASTRO][ICE] Metered ICE servers loaded successfully:",
+        {
+          count: result.iceServers.length,
+          servers: result.iceServers.map((server) => ({
+            urls: server.urls,
+            hasUsername: Boolean(server.username),
+            hasCredential: Boolean(server.credential),
+          })),
+        }
+      );
+
+      return iceServers;
+    } catch (error) {
+      console.error(
+        "[ASTRO][ICE] Failed to load Metered TURN credentials. Falling back to Google STUN:",
+        error
+      );
+
+      return fallbackIceServers;
+    }
   }, []);
 
   // =====================================================
@@ -521,12 +537,22 @@ const Calling = () => {
   // =====================================================
 
   const createPeerConnection = useCallback(
-    (roomId) => {
+    async (roomId) => {
       if (peerConnectionRef.current) {
         return peerConnectionRef.current;
       }
 
-      const iceServers = getIceServers();
+      // IMPORTANT:
+      // Wait for Metered credentials before creating PC.
+
+      const iceServers = await getIceServers();
+
+      // Another call might have created the PC while
+      // the TURN credentials were being fetched.
+
+      if (peerConnectionRef.current) {
+        return peerConnectionRef.current;
+      }
 
       const iceConfig = {
         iceServers,
@@ -597,8 +623,6 @@ const Calling = () => {
 
         let stream = event.streams?.[0];
 
-        // Fallback if the browser does not provide a stream.
-
         if (!stream) {
           stream = new MediaStream([event.track]);
         }
@@ -628,9 +652,6 @@ const Calling = () => {
           }
         }
 
-        // Track can initially arrive muted and become
-        // unmuted when media starts flowing.
-
         event.track.onunmute = () => {
           console.log(
             "[ASTRO][AUDIO] Remote audio track is now unmuted"
@@ -648,10 +669,6 @@ const Calling = () => {
             "[ASTRO][AUDIO] Remote audio track ended"
           );
         };
-
-        // IMPORTANT:
-        // ontrack does not mean the call is connected.
-        // Wait for ICE connection state.
       };
 
       // =================================================
@@ -978,6 +995,7 @@ const Calling = () => {
     socketRef.current = socket;
 
     // Initialize microphone in advance.
+
     initMedia();
 
     // =================================================
@@ -1020,8 +1038,6 @@ const Calling = () => {
       setCallerName(data.userName || "Client");
 
       setCallState("ringing");
-
-      // Incoming call time is in minutes.
 
       setCallTime(
         Math.max(0, Number(data.callTime) || 0) * 60
@@ -1108,7 +1124,11 @@ const Calling = () => {
           );
         }
 
-        const pc = createPeerConnection(roomId);
+        // IMPORTANT:
+        // Wait for Metered TURN credentials before
+        // creating the RTCPeerConnection.
+
+        const pc = await createPeerConnection(roomId);
 
         console.log(
           "[ASTRO][SDP] Received offer:",
@@ -1118,9 +1138,6 @@ const Calling = () => {
             signalingStateBefore: pc.signalingState,
           }
         );
-
-        // If this peer connection already has a remote
-        // description, avoid applying the same offer again.
 
         if (pc.remoteDescription?.type === "offer") {
           console.warn(
@@ -1147,7 +1164,7 @@ const Calling = () => {
           }
         );
 
-        // Now it is safe to add queued ICE candidates.
+        // Add queued ICE candidates.
 
         await drainPendingIceCandidates(pc);
 
@@ -1515,9 +1532,6 @@ const Calling = () => {
         }
       );
 
-      // Socket event listeners have already been
-      // registered by the effect above.
-
       reconnectCall(call.roomId);
     } catch (error) {
       console.error(
@@ -1555,8 +1569,6 @@ const Calling = () => {
         "[ASTRO][CALL] Accepting call:",
         roomId
       );
-
-      // Ensure microphone is ready.
 
       const stream = await initMedia();
 
