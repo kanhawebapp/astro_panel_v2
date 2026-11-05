@@ -175,20 +175,40 @@ const Calling = () => {
   const createPeerConnection = (roomId) => {
     if (peerConnectionRef.current) return peerConnectionRef.current;
 
+    // const iceConfig = {
+    //   iceServers: [
+    //     { urls: "stun:stun.l.google.com:19302" },
+    //     { urls: "stun:stun1.l.google.com:19302" },
+    //     { urls: "stun:stun2.l.google.com:19302" },
+    //     {
+    //       urls: "turn:openrelay.metered.ca:80",
+    //       username: "openrelayproject",
+    //       credential: "openrelayproject",
+    //     },
+    //     {
+    //       urls: "turn:openrelay.metered.ca:443",
+    //       username: "openrelayproject",
+    //       credential: "openrelayproject",
+    //     },
+    //   ],
+    //   iceCandidatePoolSize: 10,
+    // };
+
     const iceConfig = {
       iceServers: [
+        // STUN — keep these
         { urls: "stun:stun.l.google.com:19302" },
         { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
+
+        // TURN — the actual relay; MUST be a working server
         {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject",
+          urls: [
+            "turn:turn.staging.dhwaniastro.com:3478?transport=udp",
+            "turn:turn.staging.dhwaniastro.com:3478?transport=tcp",
+            "turns:turn.staging.dhwaniastro.com:5349",
+          ],
+          username: "webrtc",
+          credential: "yourStrongPassword",
         },
       ],
       iceCandidatePoolSize: 10,
