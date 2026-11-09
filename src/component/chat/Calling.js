@@ -22,17 +22,14 @@ import SocketContext from "../SocketClient";
 // TURN CONFIGURATION
 // ========================================
 
-// For production, fetch temporary credentials from your backend.
-// Never expose your permanent Coturn secret in frontend code.
-console.log("passssssssssss",process.env.NEXT_PUBLIC_TURN_USERNAME,process.env.NEXT_PUBLIC_TURN_CREDENTIAL);
 
-const TURN_USERNAME = "turnuser";
-const TURN_CREDENTIAL = "Shiva@2025#";
 
-// Set true temporarily to verify TURN relay connectivity.
-// Set false after successful testing.
+const Calling = () => {
+  // ========================================
+  // REFS
+  // ========================================
+
 const FORCE_RELAY = true;
-
 const ICE_SERVERS = [
   {
     urls: "stun:162.214.102.56:3478",
@@ -42,15 +39,10 @@ const ICE_SERVERS = [
       "turn:162.214.102.56:3478?transport=udp",
       "turn:162.214.102.56:3478?transport=tcp",
     ],
-    username: TURN_USERNAME,
-    credential: TURN_CREDENTIAL,
+    username: process.env.NEXT_PUBLIC_TURN_USERNAME,
+    credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
   },
 ];
-
-const Calling = () => {
-  // ========================================
-  // REFS
-  // ========================================
 
   const ringtoneRef = useRef(null);
   const remoteAudioRef = useRef(null);
