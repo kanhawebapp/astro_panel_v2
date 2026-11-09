@@ -28,7 +28,7 @@ const Calling = () => {
   // ========================================
   // REFS
   // ========================================
-
+console.log("eeeeeeeeeeeeeeenveeeeee",process.env.NEXT_PUBLIC_TURN_USERNAME,process.env.NEXT_PUBLIC_TURN_CREDENTIAL);
 const FORCE_RELAY = true;
 const ICE_SERVERS = [
   {
