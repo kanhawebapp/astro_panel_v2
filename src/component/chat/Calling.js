@@ -175,13 +175,23 @@ const Calling = () => {
   const createPeerConnection = (roomId) => {
     if (peerConnectionRef.current) return peerConnectionRef.current;
 
-    // ✅ LOCAL STUN SERVER (coturn on 192.168.1.39)
-    const iceConfig = {
-      iceServers: [{ urls: "stun:192.168.1.39:3478" }],
-      iceCandidatePoolSize: 10,
-    };
+    const iceServers = [
+        {
+          urls: "stun:162.214.102.56:3478",
+        },
+        {
+          urls: [
+            "turn:162.214.102.56:3478?transport=udp",
+            "turn:162.214.102.56:3478?transport=tcp",
+          ],
+          username: "turnuser",
+          credential: "Shiva@2025#",
+        },
+      ];
 
-    const pc = new RTCPeerConnection(iceConfig);
+     
+
+    const pc = new RTCPeerConnection(iceServers);
     peerConnectionRef.current = pc;
 
     if (localStreamRef.current) {
