@@ -65,6 +65,18 @@ export const UPLOAD_FILE = gql`
     }
   }
 `;
+export const GET_PREVIOUS_REMEDIES = gql`
+  query GetPreviousRemedies($userId: ID!) {
+    getPreviousRemedies(userId: $userId) {
+      id
+      sessionId
+      sessionType
+      remedyText
+      createdAt
+    }
+  }
+`;
+
 const AstrologerChat = () => {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -93,6 +105,8 @@ const AstrologerChat = () => {
   const [showCannedDropdown, setShowCannedDropdown] = useState(false);
   const [showRemedyDropdown, setShowRemedyDropdown] = useState(false);
   const [uploadFile, { loading: uploading }] = useMutation(UPLOAD_FILE);
+  const [previousRemedies, setPreviousRemedies] = useState([]);
+  const [showPreviousRemedies, setShowPreviousRemedies] = useState(true);
 
   // Decrypt chat params
   const encryptedData = searchParams.get("data");
@@ -121,7 +135,6 @@ const AstrologerChat = () => {
     fetchPolicy: "network-only",
   });
 
-
   // GraphQL query for remedies
   const {
     data: remedyData,
@@ -130,6 +143,46 @@ const AstrologerChat = () => {
   } = useQuery(GET_REMEDY_FOR_CHAT, {
     fetchPolicy: "network-only",
   });
+
+  // Fetch remedies previously sent to this user
+  const {
+    data: previousRemedyData,
+    loading: previousRemedyLoading,
+    error: previousRemedyError,
+    refetch: refetchPreviousRemedies,
+  } = useQuery(GET_PREVIOUS_REMEDIES, {
+    variables: {
+      userId: userId,
+    },
+    skip: !userId || !token,
+    fetchPolicy: "network-only",
+    notifyOnNetworkStatusChange: true,
+  });
+
+  useEffect(() => {
+    const remedies = previousRemedyData?.getPreviousRemedies;
+    console.log("remedyyyyyyyyyyyyyyyyyyyyyyyyyyyy",remedies);
+
+    if (Array.isArray(remedies)) {
+      setPreviousRemedies(remedies);
+    }
+  }, [previousRemedyData]);
+
+  const formatRemedyDate = (date) => {
+    if (!date) return "";
+
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) return "";
+
+    return parsedDate.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   useEffect(() => {
     if (remedyData?.getRemediesForChat?.data) {
@@ -356,8 +409,7 @@ const AstrologerChat = () => {
     return null;
   };
 
-  useEffect(() => {
-}, [remedyData, remedyError]);
+  useEffect(() => {}, [remedyData, remedyError]);
 
   const [endTime, setEndTime] = useState(getEndTime());
   const [timeLeft, setTimeLeft] = useState(() => {
@@ -568,58 +620,52 @@ const AstrologerChat = () => {
   // };
 
   const handleMessageChange = (e) => {
-  const value = e.target.value;
+    const value = e.target.value;
 
-  setMessage(value);
+    setMessage(value);
 
-  // -----------------------------------------
-  // Clear previous typing timeout
-  // -----------------------------------------
-  if (typingTimeoutRef.current) {
-    clearTimeout(typingTimeoutRef.current);
-  }
+    // -----------------------------------------
+    // Clear previous typing timeout
+    // -----------------------------------------
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
 
-  // -----------------------------------------
-  // If message is empty
-  // -----------------------------------------
-  if (!value.trim()) {
+    // -----------------------------------------
+    // If message is empty
+    // -----------------------------------------
+    if (!value.trim()) {
+      socket.emit("typing", {
+        room_id: roomId,
+        typing: false,
+        user_name: "Astrologer",
+      });
+
+      return;
+    }
+
+    // -----------------------------------------
+    // User started typing
+    // -----------------------------------------
     socket.emit("typing", {
       room_id: roomId,
-      typing: false,
+      typing: true,
       user_name: "Astrologer",
     });
 
-    
+    // -----------------------------------------
+    // Stop typing after 2 seconds
+    // -----------------------------------------
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit("typing", {
+        room_id: roomId,
+        typing: false,
+        user_name: "Astrologer",
+      });
 
-    return;
-  }
-
-  // -----------------------------------------
-  // User started typing
-  // -----------------------------------------
-  socket.emit("typing", {
-    room_id: roomId,
-    typing: true,
-    user_name: "Astrologer",
-  });
-
- 
-
-  // -----------------------------------------
-  // Stop typing after 2 seconds
-  // -----------------------------------------
-  typingTimeoutRef.current = setTimeout(() => {
-    socket.emit("typing", {
-      room_id: roomId,
-      typing: false,
-      user_name: "Astrologer",
-    });
-
-    
-
-    typingTimeoutRef.current = null;
-  }, 2000);
-};
+      typingTimeoutRef.current = null;
+    }, 2000);
+  };
 
   const sendMessage = async () => {
     if (!message.trim() && !imageFile) return;
@@ -716,7 +762,6 @@ const AstrologerChat = () => {
       setImageFile(compressedFile);
 
       setImagePreview(URL.createObjectURL(compressedImage));
-
 
       if (messageInputRef.current) {
         messageInputRef.current.focus();
@@ -864,6 +909,102 @@ const AstrologerChat = () => {
 
             <div className="relative p-4 space-y-2">
               <div className="flex flex-col gap-2 msgs-boxs">
+                {/* =====================================
+    PREVIOUSLY SENT REMEDIES
+===================================== */}
+
+                <div className="w-full mb-3">
+                  <div
+                    className="flex items-center justify-between px-3 py-2 bg-purple-100 border border-purple-200 rounded-lg cursor-pointer"
+                    onClick={() =>
+                      setShowPreviousRemedies(!showPreviousRemedies)
+                    }
+                  >
+                    <div className="flex items-center gap-2">
+                      <GiAstrolabe className="text-purple-700" size={18} />
+
+                      <span className="text-xs font-semibold text-purple-900">
+                        Previously Sent Remedies
+                      </span>
+
+                      <span className="px-2 py-0.5 text-[10px] text-white bg-purple-600 rounded-full">
+                        {previousRemedies.length}
+                      </span>
+                    </div>
+
+                    <span className="text-purple-700 text-xs">
+                      {showPreviousRemedies ? "▲" : "▼"}
+                    </span>
+                  </div>
+
+                  <AnimatePresence>
+                    {showPreviousRemedies && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="p-3 mt-2 space-y-2 overflow-y-auto bg-white border border-purple-100 rounded-lg max-h-52">
+                          {previousRemedyLoading ? (
+                            <div className="py-3 text-xs text-center text-gray-500">
+                              Loading previous remedies...
+                            </div>
+                          ) : previousRemedyError ? (
+                            <div className="py-3 text-xs text-center text-red-500">
+                              Unable to load previous remedies.
+                            </div>
+                          ) : previousRemedies.length > 0 ? (
+                            previousRemedies.map((item, index) => (
+                              <div
+                                key={item.id}
+                                className="p-3 border border-gray-200 rounded-lg bg-purple-50"
+                              >
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <span className="text-xs font-semibold text-purple-800">
+                                    Remedy #{index + 1}
+                                  </span>
+
+                                  <span className="text-[10px] text-gray-500">
+                                    {formatRemedyDate(item.createdAt)}
+                                  </span>
+                                </div>
+
+                                <p className="text-xs leading-relaxed text-gray-700 whitespace-pre-wrap break-words">
+                                  {item.remedyText}
+                                </p>
+
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="text-[10px] text-gray-500">
+                                    Session Type: {item.sessionType || "CHAT"}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleRemedySelect(item.remedyText)
+                                    }
+                                    className="px-3 py-1 text-[10px] font-semibold text-purple-700 bg-purple-200 rounded-full hover:bg-purple-300"
+                                  >
+                                    Use Again
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="py-4 text-xs text-center text-gray-500">
+                              <GiAstrolabe
+                                className="mx-auto mb-2 text-gray-400"
+                                size={25}
+                              />
+                              No previous remedies sent to this user.
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
                 <div className="flex flex-col self-end bg-purple-200 rounded-lg px-3 py-2 text-black md:text-xs text-[10px] w-fit gap-1">
                   <div className="flex flex-col gap-1 msgs-det">
                     <span className="flex items-center gap-2">
@@ -1174,12 +1315,12 @@ const AstrologerChat = () => {
                   )}
                 </div>
                 <input
-  ref={fileInputRef}
-  type="file"
-  accept="image/*"
-  hidden
-  onChange={handleImageChange}
-/>
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={handleImageChange}
+                />
                 <button
                   type="button"
                   className="p-1 text-xs text-white bg-purple-400 rounded-full flex items-center gap-1"
