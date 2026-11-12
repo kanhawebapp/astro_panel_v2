@@ -387,3 +387,37 @@ export const DELETE_SCHEDULED_LIVE = gql`
     deleteScheduledLive(id: $id)
   }
 `;
+
+
+export const GET_PENDING_LIVE_INTERACTIONS = gql`
+  query GetPendingLiveInteractions($liveStreamId: ID!) {
+    getPendingLiveInteractions(liveStreamId: $liveStreamId) {
+      id
+      liveStreamId
+      userId
+      astrologerId
+      agoraUid
+      interactionType
+      status
+      requestedAt
+    }
+  }
+`;
+
+export const RESPOND_LIVE_INTERACTION_REQUEST = gql`
+  mutation RespondLiveInteractionRequest(
+    $requestId: ID!
+    $action: LiveInteractionAction!
+  ) {
+    respondLiveInteractionRequest(
+      requestId: $requestId
+      action: $action
+    ) {
+      id
+      status
+      interactionType
+      acceptedAt
+      endedAt
+    }
+  }
+`;

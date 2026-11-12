@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import { useApolloClient, useMutation, useQuery } from "@apollo/client/react";
-
 import AgoraRTC from "agora-rtc-sdk-ng";
 import AgoraChat from "agora-chat";
 
@@ -16,15 +14,17 @@ import {
   UPDATE_SCHEDULED_LIVE,
   DELETE_SCHEDULED_LIVE,
   START_LIVE_TOGGLE_SERVICES,
+  GET_PENDING_LIVE_INTERACTIONS,
+  RESPOND_LIVE_INTERACTION_REQUEST,
+  END_LIVE_INTERACTION,
 } from "@/app/utils/panelQueries";
 
 export default function AgentLiveStreaming({ astrologerId }) {
-  // ============================================
+  // =====================================================
   // STATE
-  // ============================================
+  // =====================================================
 
   const [title, setTitle] = useState("");
-
   const [streamId, setStreamId] = useState(null);
   const [isLive, setIsLive] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -37,13 +37,13 @@ export default function AgentLiveStreaming({ astrologerId }) {
   const [restoringLive, setRestoringLive] = useState(false);
   const [recoveryRequired, setRecoveryRequired] = useState(false);
 
-  // Schedule live form
+  // Schedule live
   const [scheduleTitle, setScheduleTitle] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleEndTime, setScheduleEndTime] = useState("");
 
-  // Edit scheduled live form
+  // Edit scheduled live
   const [editingLiveId, setEditingLiveId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
@@ -53,12 +53,21 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   // Delete scheduled live
   const [deletingLiveId, setDeletingLiveId] = useState(null);
+
+  // Camera and microphone
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isCameraPaused, setIsCameraPaused] = useState(false);
 
-  // ============================================
+  // Live interaction requests
+  const [pendingInteractions, setPendingInteractions] = useState([]);
+  const [interactionLoadingId, setInteractionLoadingId] = useState(null);
+  const [activeInteraction, setActiveInteraction] = useState(null);
+  const [interactionNotice, setInteractionNotice] = useState("");
+  const [remoteVideoUid, setRemoteVideoUid] = useState(null);
+
+  // =====================================================
   // REFS
-  // ============================================
+  // =====================================================
 
   const rtcClientRef = useRef(null);
   const chatClientRef = useRef(null);
@@ -67,21 +76,38 @@ export default function AgentLiveStreaming({ astrologerId }) {
   const messagesSeenRef = useRef(new Set());
   const restoreAttemptRef = useRef(false);
   const restoreTimerRef = useRef(null);
+  const remoteVideoTrackRef = useRef(null);
+  const remoteAudioTrackRef = useRef(null);
+  const activeInteractionRef = useRef(null);
+
   const apolloClient = useApolloClient();
 
-  // ============================================
-  // GRAPHQL MUTATIONS AND QUERIES
-  // ============================================
+  // Keep the ref synchronized with state for Agora event callbacks.
+  useEffect(() => {
+    activeInteractionRef.current = activeInteraction;
+  }, [activeInteraction]);
+
+  // =====================================================
+  // GRAPHQL
+  // =====================================================
 
   const [startLive] = useMutation(START_LIVE);
   const [endLive] = useMutation(END_LIVE);
 
-  const [scheduleLive, { loading: scheduling }] = useMutation(SCHEDULE_LIVE);
+  const [scheduleLive, { loading: scheduling }] =
+    useMutation(SCHEDULE_LIVE);
 
   const [updateScheduledLive] = useMutation(UPDATE_SCHEDULED_LIVE);
-
   const [deleteScheduledLive] = useMutation(DELETE_SCHEDULED_LIVE);
-  const [startLiveToggleServices] = useMutation(START_LIVE_TOGGLE_SERVICES);
+  const [startLiveToggleServices] = useMutation(
+    START_LIVE_TOGGLE_SERVICES,
+  );
+
+  const [respondLiveInteractionRequest] = useMutation(
+    RESPOND_LIVE_INTERACTION_REQUEST,
+  );
+
+  const [endLiveInteraction] = useMutation(END_LIVE_INTERACTION);
 
   const {
     data,
@@ -91,11 +117,39 @@ export default function AgentLiveStreaming({ astrologerId }) {
     fetchPolicy: "network-only",
   });
 
-  // ============================================
-  // DATE HELPERS
-  // ============================================
+  // Poll for new requests only while the astrologer is live.
+  const interactionStreamId = liveInfo?.id || streamId;
 
-  // Supports ISO strings, Date values, and Unix timestamps.
+  const {
+    data: interactionData,
+    refetch: refetchInteractions,
+  } = useQuery(GET_PENDING_LIVE_INTERACTIONS, {
+    variables: {
+      liveStreamId: interactionStreamId,
+    },
+    skip: !isLive || !interactionStreamId,
+    fetchPolicy: "network-only",
+    pollInterval: isLive && interactionStreamId ? 3000 : 0,
+    notifyOnNetworkStatusChange: true,
+    onError: (error) => {
+      console.error("Live interaction polling error:", error);
+    },
+  });
+
+  // Update incoming request list whenever polling returns new data.
+  useEffect(() => {
+    const requests =
+      interactionData?.getPendingLiveInteractions || [];
+
+    setPendingInteractions(
+      requests.filter((request) => request.status === "PENDING"),
+    );
+  }, [interactionData]);
+
+  // =====================================================
+  // DATE HELPERS
+  // =====================================================
+
   const parseDate = (value) => {
     if (value === null || value === undefined || value === "") {
       return null;
@@ -112,7 +166,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   const formatDateForInput = (value) => {
     const date = parseDate(value);
-
     if (!date) return "";
 
     const year = date.getFullYear();
@@ -124,7 +177,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   const formatTimeForInput = (value) => {
     const date = parseDate(value);
-
     if (!date) return "";
 
     const hours = String(date.getHours()).padStart(2, "0");
@@ -135,7 +187,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   const formatScheduledDate = (value) => {
     const date = parseDate(value);
-
     if (!date) return "-";
 
     return date.toLocaleDateString("en-IN", {
@@ -147,7 +198,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   const formatScheduledTime = (value) => {
     const date = parseDate(value);
-
     if (!date) return "-";
 
     return date.toLocaleTimeString("en-IN", {
@@ -157,19 +207,18 @@ export default function AgentLiveStreaming({ astrologerId }) {
     });
   };
 
-  // ============================================
+  // =====================================================
   // SCHEDULED LIVE STREAMS
-  // ============================================
-
-  // The backend must also exclude expired sessions.
-  // This frontend filter provides an additional safeguard.
+  // =====================================================
 
   const scheduledLives = (data?.getMyScheduledLives || [])
     .filter((live) => {
       const endDate = parseDate(live.scheduledEndAt);
 
       return (
-        live.status === "SCHEDULED" && endDate && endDate.getTime() > Date.now()
+        live.status === "SCHEDULED" &&
+        endDate &&
+        endDate.getTime() > Date.now()
       );
     })
     .sort((a, b) => {
@@ -179,193 +228,246 @@ export default function AgentLiveStreaming({ astrologerId }) {
       return startA - startB;
     });
 
-  // ============================================
-  // OPEN EDIT FORM
-  // ============================================
+  // =====================================================
+  // AGORA REMOTE USER TRACK HANDLING
+  // =====================================================
 
-  const handleEditClick = (live) => {
-    if (live.status !== "SCHEDULED") {
-      alert("Only scheduled lives can be edited.");
+  const stopRemoteTracks = useCallback(() => {
+    try {
+      remoteVideoTrackRef.current?.stop();
+    } catch (error) {
+      console.warn("Remote video stop warning:", error);
+    }
+
+    try {
+      remoteAudioTrackRef.current?.stop();
+    } catch (error) {
+      console.warn("Remote audio stop warning:", error);
+    }
+
+    remoteVideoTrackRef.current = null;
+    remoteAudioTrackRef.current = null;
+    setRemoteVideoUid(null);
+  }, []);
+
+  const handleUserPublished = useCallback(async (user, mediaType) => {
+    const client = rtcClientRef.current;
+
+    if (!client) return;
+
+    try {
+      // Subscribe to the viewer's published track.
+      await client.subscribe(user, mediaType);
+
+      if (mediaType === "audio") {
+        remoteAudioTrackRef.current = user.audioTrack;
+
+        // Play viewer's microphone audio on the astrologer's device.
+        user.audioTrack?.play();
+
+        console.log("Subscribed to viewer audio:", user.uid);
+      }
+
+      if (mediaType === "video") {
+        remoteVideoTrackRef.current = user.videoTrack;
+
+        const uid = String(user.uid);
+        setRemoteVideoUid(uid);
+
+        console.log("Subscribed to viewer video:", uid);
+
+        // Wait for React to render the remote video container.
+        requestAnimationFrame(() => {
+          const container = document.getElementById(
+            `interaction-viewer-${uid}`,
+          );
+
+          if (container && user.videoTrack) {
+            user.videoTrack.play(container);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Unable to subscribe to viewer track:", error);
+    }
+  }, []);
+
+  const handleUserUnpublished = useCallback((user, mediaType) => {
+    if (mediaType === "audio") {
+      try {
+        user.audioTrack?.stop();
+      } catch {}
+
+      if (remoteAudioTrackRef.current === user.audioTrack) {
+        remoteAudioTrackRef.current = null;
+      }
+    }
+
+    if (mediaType === "video") {
+      try {
+        user.videoTrack?.stop();
+      } catch {}
+
+      if (remoteVideoTrackRef.current === user.videoTrack) {
+        remoteVideoTrackRef.current = null;
+        setRemoteVideoUid(null);
+      }
+    }
+  }, []);
+
+  const handleUserLeft = useCallback(
+    (user) => {
+      const active = activeInteractionRef.current;
+
+      if (
+        active?.agoraUid != null &&
+        String(active.agoraUid) === String(user.uid)
+      ) {
+        stopRemoteTracks();
+        setInteractionNotice(
+          "The viewer has disconnected from the live interaction.",
+        );
+        setActiveInteraction(null);
+      }
+
+      const client = rtcClientRef.current;
+
+      if (client) {
+        setViewerCount(client.remoteUsers.length);
+      }
+    },
+    [stopRemoteTracks],
+  );
+
+  const registerRtcEvents = useCallback(
+    (rtcClient) => {
+      rtcClient.on("user-joined", () => {
+        setViewerCount(rtcClient.remoteUsers.length);
+      });
+
+      rtcClient.on("user-left", handleUserLeft);
+
+      rtcClient.on("user-published", handleUserPublished);
+
+      rtcClient.on("user-unpublished", handleUserUnpublished);
+    },
+    [handleUserLeft, handleUserPublished, handleUserUnpublished],
+  );
+
+  // =====================================================
+  // ACCEPT / REJECT INTERACTION REQUEST
+  // =====================================================
+
+  const handleRespondInteraction = async (request, action) => {
+    if (!request?.id || interactionLoadingId) return;
+
+    if (!isLive || !rtcClientRef.current) {
+      alert("Your live session is not active.");
       return;
     }
 
-    const scheduledDate = parseDate(live.scheduledAt);
-    const scheduledEndDate = parseDate(live.scheduledEndAt);
+    try {
+      setInteractionLoadingId(request.id);
+      setInteractionNotice("");
 
-    if (!scheduledDate || !scheduledEndDate) {
-      alert("This session has an invalid or missing schedule.");
-      return;
+      const { data: responseData } =
+        await respondLiveInteractionRequest({
+          variables: {
+            requestId: request.id,
+            action,
+          },
+        });
+
+      const updatedRequest =
+        responseData?.respondLiveInteractionRequest;
+
+      if (!updatedRequest) {
+        throw new Error("Unable to process interaction request.");
+      }
+
+      setPendingInteractions((previous) =>
+        previous.filter((item) => item.id !== request.id),
+      );
+
+      if (action === "ACCEPT") {
+        setActiveInteraction({
+          ...request,
+          ...updatedRequest,
+        });
+
+        setInteractionNotice(
+          `${request.interactionType} interaction accepted. Waiting for the viewer to connect...`,
+        );
+      } else {
+        setInteractionNotice("Interaction request rejected.");
+      }
+
+      await refetchInteractions();
+    } catch (error) {
+      console.error("Respond interaction error:", error);
+
+      alert(
+        error?.graphQLErrors?.[0]?.message ||
+          error?.message ||
+          `Unable to ${action.toLowerCase()} interaction request.`,
+      );
+    } finally {
+      setInteractionLoadingId(null);
     }
-
-    if (scheduledEndDate.getTime() <= Date.now()) {
-      alert("This scheduled live has already expired.");
-      return;
-    }
-
-    setEditingLiveId(live.id);
-    setEditTitle(live.title || "");
-    setEditDate(formatDateForInput(live.scheduledAt));
-    setEditTime(formatTimeForInput(live.scheduledAt));
-    setEditEndTime(formatTimeForInput(live.scheduledEndAt));
   };
 
-  // ============================================
-  // CANCEL EDIT
-  // ============================================
+  // =====================================================
+  // END ACTIVE INTERACTION
+  // =====================================================
 
-  const handleCancelEdit = () => {
-    if (updatingLive) return;
+  const handleEndInteraction = async () => {
+    const active = activeInteractionRef.current;
 
-    setEditingLiveId(null);
-    setEditTitle("");
-    setEditDate("");
-    setEditTime("");
-    setEditEndTime("");
-  };
-
-  // ============================================
-  // SAVE EDITED SCHEDULED LIVE
-  // ============================================
-
-  const handleUpdateScheduledLive = async (e) => {
-    e.preventDefault();
-
-    if (!editingLiveId || updatingLive) {
+    if (!active?.id) {
+      setInteractionNotice("No active interaction found.");
       return;
     }
-
-    if (!editTitle.trim() || !editDate || !editTime || !editEndTime) {
-      alert("Please fill in the title, date, start time, and end time.");
-      return;
-    }
-
-    // Both times are interpreted in the browser's local timezone.
-    const scheduledDateTime = new Date(`${editDate}T${editTime}`);
-
-    const scheduledEndDateTime = new Date(`${editDate}T${editEndTime}`);
 
     if (
-      Number.isNaN(scheduledDateTime.getTime()) ||
-      Number.isNaN(scheduledEndDateTime.getTime())
+      !window.confirm(
+        "Are you sure you want to end this viewer interaction?",
+      )
     ) {
-      alert("Please select a valid date and time.");
-      return;
-    }
-
-          const selectedDate = new Date(scheduledDateTime);
-      const now = new Date();
-
-      const selectedTime =
-        selectedDate.getHours() * 60 + selectedDate.getMinutes();
-
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-
-      if (selectedTime <= currentTime) {
-        alert("Please select a future time.");
-        return;
-      }
-
-    if (scheduledEndDateTime <= scheduledDateTime) {
-      alert("End time must be later than start time.");
       return;
     }
 
     try {
-      setUpdatingLive(true);
+      setInteractionLoadingId(active.id);
 
-      await updateScheduledLive({
+      await endLiveInteraction({
         variables: {
-          id: editingLiveId,
-          title: editTitle.trim(),
-          scheduledAt: scheduledDateTime.toISOString(),
-          scheduledEndAt: scheduledEndDateTime.toISOString(),
+          requestId: active.id,
         },
       });
 
-      await refetch();
+      stopRemoteTracks();
+      setActiveInteraction(null);
+      activeInteractionRef.current = null;
 
-      setEditingLiveId(null);
-      setEditTitle("");
-      setEditDate("");
-      setEditTime("");
-      setEditEndTime("");
+      setInteractionNotice("Viewer interaction ended successfully.");
 
-      alert("Scheduled live updated successfully.");
+      await refetchInteractions();
     } catch (error) {
-      console.error("Update scheduled live error:", error);
+      console.error("End interaction error:", error);
 
       alert(
         error?.graphQLErrors?.[0]?.message ||
           error?.message ||
-          "Failed to update scheduled live.",
+          "Unable to end viewer interaction.",
       );
     } finally {
-      setUpdatingLive(false);
+      setInteractionLoadingId(null);
     }
   };
 
-  // ============================================
-  // DELETE SCHEDULED LIVE
-  // ============================================
-
-  const handleDeleteScheduledLive = async (live) => {
-    if (deletingLiveId || updatingLive) {
-      return;
-    }
-
-    if (live.status !== "SCHEDULED") {
-      alert("Only scheduled lives can be deleted.");
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${live.title || "Untitled Live"}"?`,
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingLiveId(live.id);
-
-      const { data: deleteData } = await deleteScheduledLive({
-        variables: {
-          id: live.id,
-        },
-      });
-
-      if (deleteData?.deleteScheduledLive !== true) {
-        throw new Error("Unable to delete scheduled live.");
-      }
-
-      if (editingLiveId === live.id) {
-        setEditingLiveId(null);
-        setEditTitle("");
-        setEditDate("");
-        setEditTime("");
-        setEditEndTime("");
-      }
-
-      await refetch();
-
-      alert("Scheduled live deleted successfully.");
-    } catch (error) {
-      console.error("Delete scheduled live error:", error);
-
-      alert(
-        error?.graphQLErrors?.[0]?.message ||
-          error?.message ||
-          "Failed to delete scheduled live.",
-      );
-    } finally {
-      setDeletingLiveId(null);
-    }
-  };
-
-  // ============================================
+  // =====================================================
   // AGORA CHAT CONNECTION
-  // ============================================
+  // =====================================================
 
   const connectChat = useCallback(async (live) => {
     if (!live?.chatRoomId) {
@@ -378,7 +480,8 @@ export default function AgentLiveStreaming({ astrologerId }) {
       );
     }
 
-    const appKey = live.chatAppKey || process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY;
+    const appKey =
+      live.chatAppKey || process.env.NEXT_PUBLIC_AGORA_CHAT_APPKEY;
 
     if (!appKey) {
       throw new Error(
@@ -386,9 +489,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
       );
     }
 
-    const chatClient = new AgoraChat.connection({
-      appKey,
-    });
+    const chatClient = new AgoraChat.connection({ appKey });
 
     chatClientRef.current = chatClient;
 
@@ -396,17 +497,13 @@ export default function AgentLiveStreaming({ astrologerId }) {
       onTextMessage: (msg) => {
         if (msg.chatType !== "chatRoom") return;
 
-        if (String(msg.to) !== String(live.chatRoomId)) {
-          return;
-        }
+        if (String(msg.to) !== String(live.chatRoomId)) return;
 
         const messageId =
           msg.id ||
           `${msg.from || "viewer"}-${msg.time || Date.now()}-${msg.msg}`;
 
-        if (messagesSeenRef.current.has(messageId)) {
-          return;
-        }
+        if (messagesSeenRef.current.has(messageId)) return;
 
         messagesSeenRef.current.add(messageId);
 
@@ -421,10 +518,14 @@ export default function AgentLiveStreaming({ astrologerId }) {
         const isGift = payload?.type === "gift";
 
         const sender =
-          (isGift ? payload.senderName : null) || msg.from || "Viewer";
+          (isGift ? payload.senderName : null) ||
+          msg.from ||
+          "Viewer";
 
         const text = isGift
-          ? `sent ${payload.quantity ?? 1} x ${payload.giftName || "gift"}`
+          ? `sent ${payload.quantity ?? 1} x ${
+              payload.giftName || "gift"
+            }`
           : String(msg.msg ?? "");
 
         setMessages((previous) => [
@@ -466,9 +567,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
   }, []);
 
-  // ============================================
+  // =====================================================
   // RESTORE ACTIVE LIVE AFTER PAGE REFRESH
-  // ============================================
+  // =====================================================
 
   useEffect(() => {
     let cancelled = false;
@@ -486,6 +587,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         const savedSessionText = localStorage.getItem(
           "dhwaniastro_active_live",
         );
+
         if (!savedSessionText) {
           setRecoveryRequired(false);
           return;
@@ -505,9 +607,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
         setTitle(savedSession.title || "");
         setStreamId(savedSession.streamId);
 
-        // Use client.query instead of useLazyQuery. Apollo lazy-query execution
-        // can be aborted when React StrictMode performs its development
-        // setup/cleanup cycle. A direct client.query is not tied to hook cleanup.
         const { data: joinData } = await apolloClient.query({
           query: JOIN_LIVE,
           variables: {
@@ -521,6 +620,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         if (cancelled) return;
 
         const live = joinData?.joinLive;
+
         if (
           !live?.appId ||
           !live?.rtcToken ||
@@ -553,18 +653,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
         if (cancelled) return;
 
-        rtcClient = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        rtcClient = AgoraRTC.createClient({
+          mode: "live",
+          codec: "vp8",
+        });
+
         rtcClientRef.current = rtcClient;
-
-        rtcClient.on("user-joined", () => {
-          if (!cancelled) setViewerCount(rtcClient.remoteUsers.length);
-        });
-
-        rtcClient.on("user-left", () => {
-          if (!cancelled) setViewerCount(rtcClient.remoteUsers.length);
-        });
+        registerRtcEvents(rtcClient);
 
         await rtcClient.setClientRole("host");
+
         await rtcClient.join(
           live.appId,
           live.channelName,
@@ -583,26 +681,29 @@ export default function AgentLiveStreaming({ astrologerId }) {
         if (cancelled) return;
 
         micTrack = await AgoraRTC.createMicrophoneAudioTrack();
+
         if (cancelled) {
           micTrack.close();
           micTrack = null;
           return;
         }
+
         micTrackRef.current = micTrack;
 
         cameraTrack = await AgoraRTC.createCameraVideoTrack();
+
         if (cancelled) {
           cameraTrack.close();
           cameraTrack = null;
           return;
         }
+
         cameraTrackRef.current = cameraTrack;
 
         await rtcClient.publish([micTrack, cameraTrack]);
 
         if (cancelled) return;
 
-        // Wait until the video container is present before attaching the preview.
         requestAnimationFrame(() => {
           if (
             !cancelled &&
@@ -624,15 +725,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
         console.log("Active live session restored successfully.");
       } catch (error) {
-        // Cancellation is expected if the user navigates away during recovery.
         if (
           cancelled ||
           error?.name === "AbortError" ||
           error?.name === "CanceledError"
         ) {
-          console.info(
-            "Live restoration was cancelled; the saved session was preserved.",
-          );
+          console.info("Live restoration was cancelled.");
           return;
         }
 
@@ -659,6 +757,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
                 roomId: String(savedSession.chatRoomId),
               });
             }
+
             await restoredChatClient.close();
           } catch (cleanupError) {
             console.warn("Restore chat cleanup warning:", cleanupError);
@@ -673,44 +772,50 @@ export default function AgentLiveStreaming({ astrologerId }) {
           }
         }
 
-        if (micTrackRef.current === micTrack) micTrackRef.current = null;
-        if (cameraTrackRef.current === cameraTrack)
+        if (micTrackRef.current === micTrack) {
+          micTrackRef.current = null;
+        }
+
+        if (cameraTrackRef.current === cameraTrack) {
           cameraTrackRef.current = null;
-        if (chatClientRef.current === restoredChatClient)
+        }
+
+        if (chatClientRef.current === restoredChatClient) {
           chatClientRef.current = null;
-        if (rtcClientRef.current === rtcClient) rtcClientRef.current = null;
+        }
+
+        if (rtcClientRef.current === rtcClient) {
+          rtcClientRef.current = null;
+        }
 
         if (!cancelled) {
           setIsLive(false);
           setLiveInfo(null);
           setRecoveryRequired(Boolean(savedSession?.streamId));
         }
-        // Do not clear localStorage or end the backend stream on a recoverable error.
       } finally {
         if (!cancelled) setRestoringLive(false);
         restoreAttemptRef.current = false;
       }
     };
 
-    // React StrictMode immediately runs effect setup -> cleanup -> setup in
-    // development. Deferring one tick lets the first setup be cancelled before
-    // it starts a network request, preventing duplicate/aborted restore calls.
     restoreTimerRef.current = window.setTimeout(() => {
       restoreActiveLive();
     }, 0);
 
     return () => {
       cancelled = true;
+
       if (restoreTimerRef.current) {
         window.clearTimeout(restoreTimerRef.current);
         restoreTimerRef.current = null;
       }
     };
-  }, [apolloClient, connectChat]);
+  }, [apolloClient, connectChat, registerRtcEvents]);
 
-  // ============================================
+  // =====================================================
   // MUTE / UNMUTE MICROPHONE
-  // ============================================
+  // =====================================================
 
   const handleToggleMicrophone = async () => {
     const micTrack = micTrackRef.current;
@@ -721,24 +826,19 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
 
     try {
-      // isMicMuted is false when the microphone is enabled.
       const shouldMute = !isMicMuted;
 
       await micTrack.setEnabled(!shouldMute);
-
       setIsMicMuted(shouldMute);
-
-      console.log(shouldMute ? "Microphone muted" : "Microphone unmuted");
     } catch (error) {
       console.error("Microphone toggle error:", error);
-
       alert("Unable to change microphone state.");
     }
   };
 
-  // ============================================
+  // =====================================================
   // PAUSE / RESUME CAMERA
-  // ============================================
+  // =====================================================
 
   const handleToggleCamera = async () => {
     const cameraTrack = cameraTrackRef.current;
@@ -749,14 +849,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
 
     try {
-      // isCameraPaused is false when the camera is enabled.
       const shouldPause = !isCameraPaused;
 
       await cameraTrack.setEnabled(!shouldPause);
 
       setIsCameraPaused(shouldPause);
 
-      // Keep the local preview in sync with the camera state.
       const localPlayer = document.getElementById("local-player");
 
       if (shouldPause) {
@@ -776,38 +874,34 @@ export default function AgentLiveStreaming({ astrologerId }) {
           });
         }
       }
-
-      console.log(shouldPause ? "Camera paused" : "Camera resumed");
     } catch (error) {
       console.error("Camera toggle error:", error);
-
       alert("Unable to change camera state.");
     }
   };
 
-  // ============================================
+  // =====================================================
   // START LIVE
-  // ============================================
+  // =====================================================
 
   const handleStartLive = async () => {
     if (starting) return;
 
-    let rtcClient;
+    let rtcClient = null;
     let currentLive = null;
     let createdStreamId = null;
     let liveServiceEnabled = false;
     let effectiveAstrologerId = null;
 
     try {
-   
-       
-       const service_status = JSON.parse(localStorage.getItem("service_status") || "null");
-       if(service_status?.isLiveActive==false){
-       alert("Please Enable Your Live Streaming Service.");
-        return; 
-       }
+      const serviceStatus = JSON.parse(
+        localStorage.getItem("service_status") || "null",
+      );
 
-      console.log(service_status);
+      if (serviceStatus?.isLiveActive === false) {
+        alert("Please Enable Your Live Streaming Service.");
+        return;
+      }
 
       if (!title.trim()) {
         alert("Enter stream title.");
@@ -820,7 +914,14 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setViewerCount(0);
       setIsMicMuted(false);
       setIsCameraPaused(false);
-      const astroUser = JSON.parse(localStorage.getItem("astro_user") || "{}");
+      setPendingInteractions([]);
+      setActiveInteraction(null);
+      setInteractionNotice("");
+
+      const astroUser = JSON.parse(
+        localStorage.getItem("astro_user") || "{}",
+      );
+
       effectiveAstrologerId = astrologerId || astroUser.id;
 
       if (!effectiveAstrologerId) {
@@ -829,7 +930,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         );
       }
 
-      // 1. Enable LIVE service. Backend also disables paid CHAT and CALL.
+      // 1. Enable LIVE service.
       const { data: toggleData } = await startLiveToggleServices({
         variables: {
           astrologerId: effectiveAstrologerId,
@@ -844,9 +945,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
             "Unable to enable LIVE service.",
         );
       }
+
       liveServiceEnabled = true;
 
-      // 2. Create or activate the stream.
+      // 2. Create stream.
       const { data: startData } = await startLive({
         variables: {
           title: title.trim(),
@@ -867,7 +969,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
         title: stream.title?.trim() || title.trim(),
       };
 
-      // Persist immediately so a refresh during Agora setup can recover this stream.
       localStorage.setItem(
         "dhwaniastro_active_live",
         JSON.stringify(activeLiveSession),
@@ -920,7 +1021,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         }),
       );
 
-      // 4. Join RTC channel.
+      // 4. Join Agora RTC channel.
       rtcClient = AgoraRTC.createClient({
         mode: "live",
         codec: "vp8",
@@ -928,15 +1029,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       rtcClientRef.current = rtcClient;
 
+      registerRtcEvents(rtcClient);
+
       await rtcClient.setClientRole("host");
-
-      rtcClient.on("user-joined", () => {
-        setViewerCount(rtcClient.remoteUsers.length);
-      });
-
-      rtcClient.on("user-left", () => {
-        setViewerCount(rtcClient.remoteUsers.length);
-      });
 
       await rtcClient.join(
         live.appId,
@@ -945,32 +1040,26 @@ export default function AgentLiveStreaming({ astrologerId }) {
         live.uid,
       );
 
-      // 5. Connect to Agora Chat.
+      // 5. Connect Agora Chat.
       await connectChat(currentLive);
 
-      // 6. Start microphone and camera.
+      // 6. Create microphone and camera tracks.
       const mic = await AgoraRTC.createMicrophoneAudioTrack();
-
       micTrackRef.current = mic;
 
       const camera = await AgoraRTC.createCameraVideoTrack();
-
       cameraTrackRef.current = camera;
 
-      // Both tracks start enabled.
       await mic.setEnabled(true);
       await camera.setEnabled(true);
 
-      // Publish microphone and camera.
+      // 7. Publish astrologer's tracks.
       await rtcClient.publish([mic, camera]);
 
-      // Display local camera preview.
       camera.play("local-player");
 
-      // Reset control states.
       setIsMicMuted(false);
       setIsCameraPaused(false);
-
       setIsLive(true);
       setRecoveryRequired(false);
 
@@ -993,7 +1082,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
       console.error("Start live error:", error);
 
       try {
+        cameraTrackRef.current?.stop();
         cameraTrackRef.current?.close();
+        micTrackRef.current?.stop();
         micTrackRef.current?.close();
 
         cameraTrackRef.current = null;
@@ -1029,7 +1120,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
           }
         }
 
-        // Reset the stream if setup failed after activation.
         if (createdStreamId) {
           try {
             await endLive({
@@ -1048,7 +1138,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
           }
         }
 
-        // If stream setup failed, switch LIVE back off.
         if (liveServiceEnabled && effectiveAstrologerId) {
           try {
             await startLiveToggleServices({
@@ -1058,6 +1147,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
                 status: false,
               },
             });
+
             liveServiceEnabled = false;
           } catch (toggleCleanupError) {
             console.error(
@@ -1078,7 +1168,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setRecoveryRequired(
         Boolean(localStorage.getItem("dhwaniastro_active_live")),
       );
-
       setIsMicMuted(false);
       setIsCameraPaused(false);
 
@@ -1098,9 +1187,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
   };
 
-  // ============================================
+  // =====================================================
   // SEND ASTROLOGER MESSAGE
-  // ============================================
+  // =====================================================
 
   const sendAstrologerMessage = async () => {
     const text = message.trim();
@@ -1143,18 +1232,13 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setMessage("");
     } catch (error) {
       console.error("Send message error:", error);
-
       alert("Unable to send message.");
     }
   };
 
-  // ============================================
+  // =====================================================
   // END LIVE
-  // ============================================
-
-  // ============================================
-  // END LIVE
-  // ============================================
+  // =====================================================
 
   const handleEndLive = async () => {
     if (ending) return;
@@ -1165,16 +1249,22 @@ export default function AgentLiveStreaming({ astrologerId }) {
     let backendStreamEnded = false;
 
     try {
+      const astroUser = JSON.parse(
+        localStorage.getItem("astro_user") || "{}",
+      );
 
-      const astroUser = JSON.parse(localStorage.getItem("astro_user") || "{}");
       astrologerIdForEnd = astrologerId || astroUser.id || null;
 
       const savedSession = JSON.parse(
         localStorage.getItem("dhwaniastro_active_live") || "{}",
       );
+
       const currentStreamId = streamId || savedSession.streamId;
 
-      // 1. Stop and close camera track.
+      // 1. Stop remote viewer tracks.
+      stopRemoteTracks();
+
+      // 2. Stop camera.
       if (cameraTrackRef.current) {
         try {
           cameraTrackRef.current.stop();
@@ -1182,10 +1272,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
         } catch (error) {
           console.warn("Camera cleanup warning:", error);
         }
+
         cameraTrackRef.current = null;
       }
 
-      // 2. Stop and close microphone track.
+      // 3. Stop microphone.
       if (micTrackRef.current) {
         try {
           micTrackRef.current.stop();
@@ -1193,11 +1284,13 @@ export default function AgentLiveStreaming({ astrologerId }) {
         } catch (error) {
           console.warn("Microphone cleanup warning:", error);
         }
+
         micTrackRef.current = null;
       }
 
-      // 3. Leave Agora RTC channel.
+      // 4. Leave Agora RTC.
       const rtcClient = rtcClientRef.current;
+
       if (rtcClient) {
         try {
           await rtcClient.unpublish();
@@ -1210,17 +1303,22 @@ export default function AgentLiveStreaming({ astrologerId }) {
         } catch (error) {
           console.warn("RTC leave warning:", error);
         }
+
         rtcClientRef.current = null;
       }
 
-      // 4. Leave Agora Chat room and close the connection.
+      // 5. Leave Agora Chat.
       const chatClient = chatClientRef.current;
+
       if (chatClient) {
-        const chatRoomId = liveInfo?.chatRoomId || savedSession.chatRoomId;
+        const chatRoomId =
+          liveInfo?.chatRoomId || savedSession.chatRoomId;
 
         if (chatRoomId) {
           try {
-            await chatClient.leaveChatRoom({ roomId: String(chatRoomId) });
+            await chatClient.leaveChatRoom({
+              roomId: String(chatRoomId),
+            });
           } catch (error) {
             console.warn("Leave chat room warning:", error);
           }
@@ -1231,10 +1329,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
         } catch (error) {
           console.warn("Chat close warning:", error);
         }
+
         chatClientRef.current = null;
       }
 
-      // 5. End the backend stream. Use localStorage if React state was lost.
+      // 6. End backend stream.
       if (!currentStreamId) {
         throw new Error(
           "Live stream ID not found. Please refresh and try again.",
@@ -1246,12 +1345,15 @@ export default function AgentLiveStreaming({ astrologerId }) {
           streamId: currentStreamId,
         },
       });
+
       backendStreamEnded = true;
 
-      // Once backend confirms the stream ended, it must not be restored again.
       localStorage.removeItem("dhwaniastro_active_live");
 
-      // 6. Turn LIVE off and restore CHAT/CALL through the backend resolver.
+      // The backend endLive resolver should also mark all PENDING and
+      // ACCEPTED interaction requests for this stream as ENDED.
+
+      // 7. Restore astrologer's CHAT/CALL services.
       if (!astrologerIdForEnd) {
         throw new Error(
           "Astrologer ID is missing; the stream ended but services could not be restored.",
@@ -1273,7 +1375,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         );
       }
 
-      // 7. Reset frontend state.
+      // 8. Reset frontend state.
       setIsLive(false);
       setStreamId(null);
       setLiveInfo(null);
@@ -1283,27 +1385,49 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setIsMicMuted(false);
       setIsCameraPaused(false);
       setMessage("");
+      setPendingInteractions([]);
+      setActiveInteraction(null);
+      activeInteractionRef.current = null;
+      setInteractionNotice("");
       messagesSeenRef.current.clear();
 
       const localPlayer = document.getElementById("local-player");
-      if (localPlayer) localPlayer.innerHTML = "";
+
+      if (localPlayer) {
+        localPlayer.innerHTML = "";
+      }
+
+      const remotePlayer = document.getElementById(
+        "interaction-viewer-container",
+      );
+
+      if (remotePlayer) {
+        remotePlayer.innerHTML = "";
+      }
 
       await refetch();
+
       localStorage.removeItem("service_status");
+
       alert("Live ended successfully. Call and chat services are enabled.");
     } catch (error) {
       console.error("End live error:", error);
 
-      // If the backend stream ended but service toggle failed, do not leave
-      // the page showing an active session. The backend service flags need repair.
       if (backendStreamEnded) {
         setIsLive(false);
         setStreamId(null);
         setLiveInfo(null);
         setRecoveryRequired(false);
         setViewerCount(0);
+        setPendingInteractions([]);
+        setActiveInteraction(null);
+        activeInteractionRef.current = null;
+
         const localPlayer = document.getElementById("local-player");
-        if (localPlayer) localPlayer.innerHTML = "";
+
+        if (localPlayer) {
+          localPlayer.innerHTML = "";
+        }
       }
 
       alert(
@@ -1316,9 +1440,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
   };
 
-  // ============================================
+  // =====================================================
   // SCHEDULE LIVE
-  // ============================================
+  // =====================================================
 
   const handleSchedule = async () => {
     if (scheduling) return;
@@ -1334,8 +1458,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
         return;
       }
 
-      // Use the same date for the start and end times.
-      const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}`);
+      const scheduledDateTime = new Date(
+        `${scheduleDate}T${scheduleTime}`,
+      );
 
       const scheduledEndDateTime = new Date(
         `${scheduleDate}T${scheduleEndTime}`,
@@ -1349,21 +1474,13 @@ export default function AgentLiveStreaming({ astrologerId }) {
         return;
       }
 
-      const selectedDate = new Date(scheduledDateTime);
-      const now = new Date();
-
-      const selectedTime =
-        selectedDate.getHours() * 60 + selectedDate.getMinutes();
-
-      const currentTime = now.getHours() * 60 + now.getMinutes();
-
-      if (selectedTime <= currentTime) {
-        alert("Please select a future time.");
+      if (scheduledDateTime <= new Date()) {
+        alert("Please select a future date and time.");
         return;
       }
 
       if (scheduledEndDateTime <= scheduledDateTime) {
-        alert("End time must be grater than start time.");
+        alert("End time must be greater than start time.");
         return;
       }
 
@@ -1394,9 +1511,175 @@ export default function AgentLiveStreaming({ astrologerId }) {
     }
   };
 
-  // ============================================
+  // =====================================================
+  // OPEN EDIT FORM
+  // =====================================================
+
+  const handleEditClick = (live) => {
+    if (live.status !== "SCHEDULED") {
+      alert("Only scheduled lives can be edited.");
+      return;
+    }
+
+    const scheduledDate = parseDate(live.scheduledAt);
+    const scheduledEndDate = parseDate(live.scheduledEndAt);
+
+    if (!scheduledDate || !scheduledEndDate) {
+      alert("This session has an invalid or missing schedule.");
+      return;
+    }
+
+    if (scheduledEndDate.getTime() <= Date.now()) {
+      alert("This scheduled live has already expired.");
+      return;
+    }
+
+    setEditingLiveId(live.id);
+    setEditTitle(live.title || "");
+    setEditDate(formatDateForInput(live.scheduledAt));
+    setEditTime(formatTimeForInput(live.scheduledAt));
+    setEditEndTime(formatTimeForInput(live.scheduledEndAt));
+  };
+
+  // =====================================================
+  // CANCEL EDIT
+  // =====================================================
+
+  const handleCancelEdit = () => {
+    if (updatingLive) return;
+
+    setEditingLiveId(null);
+    setEditTitle("");
+    setEditDate("");
+    setEditTime("");
+    setEditEndTime("");
+  };
+
+  // =====================================================
+  // UPDATE SCHEDULED LIVE
+  // =====================================================
+
+  const handleUpdateScheduledLive = async (e) => {
+    e.preventDefault();
+
+    if (!editingLiveId || updatingLive) return;
+
+    if (!editTitle.trim() || !editDate || !editTime || !editEndTime) {
+      alert("Please fill in the title, date, start time, and end time.");
+      return;
+    }
+
+    const scheduledDateTime = new Date(`${editDate}T${editTime}`);
+    const scheduledEndDateTime = new Date(`${editDate}T${editEndTime}`);
+
+    if (
+      Number.isNaN(scheduledDateTime.getTime()) ||
+      Number.isNaN(scheduledEndDateTime.getTime())
+    ) {
+      alert("Please select a valid date and time.");
+      return;
+    }
+
+    if (scheduledDateTime <= new Date()) {
+      alert("Please select a future date and time.");
+      return;
+    }
+
+    if (scheduledEndDateTime <= scheduledDateTime) {
+      alert("End time must be later than start time.");
+      return;
+    }
+
+    try {
+      setUpdatingLive(true);
+
+      await updateScheduledLive({
+        variables: {
+          id: editingLiveId,
+          title: editTitle.trim(),
+          scheduledAt: scheduledDateTime.toISOString(),
+          scheduledEndAt: scheduledEndDateTime.toISOString(),
+        },
+      });
+
+      await refetch();
+
+      setEditingLiveId(null);
+      setEditTitle("");
+      setEditDate("");
+      setEditTime("");
+      setEditEndTime("");
+
+      alert("Scheduled live updated successfully.");
+    } catch (error) {
+      console.error("Update scheduled live error:", error);
+
+      alert(
+        error?.graphQLErrors?.[0]?.message ||
+          error?.message ||
+          "Failed to update scheduled live.",
+      );
+    } finally {
+      setUpdatingLive(false);
+    }
+  };
+
+  // =====================================================
+  // DELETE SCHEDULED LIVE
+  // =====================================================
+
+  const handleDeleteScheduledLive = async (live) => {
+    if (deletingLiveId || updatingLive) return;
+
+    if (live.status !== "SCHEDULED") {
+      alert("Only scheduled lives can be deleted.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${
+        live.title || "Untitled Live"
+      }"?`,
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingLiveId(live.id);
+
+      const { data: deleteData } = await deleteScheduledLive({
+        variables: {
+          id: live.id,
+        },
+      });
+
+      if (deleteData?.deleteScheduledLive !== true) {
+        throw new Error("Unable to delete scheduled live.");
+      }
+
+      if (editingLiveId === live.id) {
+        handleCancelEdit();
+      }
+
+      await refetch();
+
+      alert("Scheduled live deleted successfully.");
+    } catch (error) {
+      console.error("Delete scheduled live error:", error);
+
+      alert(
+        error?.graphQLErrors?.[0]?.message ||
+          error?.message ||
+          "Failed to delete scheduled live.",
+      );
+    } finally {
+      setDeletingLiveId(null);
+    }
+  };
+
+  // =====================================================
   // COMPONENT CLEANUP
-  // ============================================
+  // =====================================================
 
   useEffect(() => {
     return () => {
@@ -1407,7 +1690,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
       const cameraTrack = cameraTrackRef.current;
       const micTrack = micTrackRef.current;
 
-      // Stop and close camera
+      try {
+        remoteVideoTrackRef.current?.stop();
+        remoteAudioTrackRef.current?.stop();
+      } catch (error) {
+        console.warn("Remote track cleanup warning:", error);
+      }
+
+      remoteVideoTrackRef.current = null;
+      remoteAudioTrackRef.current = null;
+
       if (cameraTrack) {
         try {
           cameraTrack.stop();
@@ -1419,7 +1711,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
         cameraTrackRef.current = null;
       }
 
-      // Stop and close microphone
       if (micTrack) {
         try {
           micTrack.stop();
@@ -1431,7 +1722,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
         micTrackRef.current = null;
       }
 
-      // Close Agora Chat safely
       if (chatClient) {
         Promise.resolve()
           .then(() => chatClient.close())
@@ -1442,7 +1732,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
         chatClientRef.current = null;
       }
 
-      // Leave Agora RTC safely
       if (rtcClient) {
         Promise.resolve()
           .then(() => rtcClient.leave())
@@ -1457,18 +1746,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
     };
   }, []);
 
-  // ============================================
+  // =====================================================
   // UI
-  // ============================================
+  // =====================================================
 
   return (
     <div className="p-6">
-      {/* ========================================
-          MAIN LIVE STREAMING LAYOUT
-      ======================================== */}
-
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* LIVE VIDEO */}
+        {/* =================================================
+            LIVE VIDEO AND CONTROLS
+        ================================================= */}
 
         <div className="xl:col-span-2 bg-white rounded-xl shadow p-4">
           <div className="flex justify-between items-center mb-4">
@@ -1505,9 +1792,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
           {recoveryRequired && !restoringLive && !isLive && (
             <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
               <p className="text-sm text-amber-800">
-                A previous live session is still recorded. Do not start a new
-                live session until you reconnect or end the previous one.
+                A previous live session is still recorded. Do not start a
+                new live session until you reconnect or end the previous one.
               </p>
+
               <button
                 type="button"
                 onClick={handleEndLive}
@@ -1521,15 +1809,46 @@ export default function AgentLiveStreaming({ astrologerId }) {
             </div>
           )}
 
+          {/* Astrologer's local video */}
           <div
             id="local-player"
             className="w-full h-[500px] rounded-xl overflow-hidden bg-black"
           />
 
-          {/* ============================================
-    LIVE STREAMING CONTROLS
-============================================ */}
+          {/* Accepted viewer's remote video */}
+          {activeInteraction?.interactionType === "VIDEO" && (
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold text-gray-800">
+                  Viewer Video
+                </h3>
 
+                {remoteVideoUid && (
+                  <span className="text-xs text-green-600">
+                    Connected
+                  </span>
+                )}
+              </div>
+
+              <div
+                id="interaction-viewer-container"
+                className="w-full h-[280px] rounded-xl overflow-hidden bg-gray-900"
+              >
+                {remoteVideoUid ? (
+                  <div
+                    id={`interaction-viewer-${remoteVideoUid}`}
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-white text-sm">
+                    Waiting for viewer video...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Live controls */}
           <div className="flex flex-wrap items-center gap-3 mt-5">
             {!isLive ? (
               <button
@@ -1552,8 +1871,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
               </button>
             ) : (
               <>
-                {/* MUTE / UNMUTE MICROPHONE */}
-
                 <button
                   type="button"
                   onClick={handleToggleMicrophone}
@@ -1567,8 +1884,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
                 >
                   {isMicMuted ? "🔇 Unmute Mic" : "🎤 Mute Mic"}
                 </button>
-
-                {/* PAUSE / RESUME CAMERA */}
 
                 <button
                   type="button"
@@ -1584,8 +1899,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
                   {isCameraPaused ? "▶ Resume Video" : "⏸ Pause Video"}
                 </button>
 
-                {/* END LIVE */}
-
                 <button
                   type="button"
                   onClick={handleEndLive}
@@ -1598,10 +1911,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
             )}
           </div>
 
-          {/* ============================================
-    MICROPHONE / CAMERA STATUS
-============================================ */}
-
+          {/* Microphone / camera status */}
           {isLive && (
             <div className="flex flex-wrap gap-3 mt-4">
               <span
@@ -1611,8 +1921,8 @@ export default function AgentLiveStreaming({ astrologerId }) {
                     : "bg-green-100 text-green-700"
                 }`}
               >
-                <span>{isMicMuted ? "🔇" : "🎤"}</span>
-                Microphone: {isMicMuted ? "Muted" : "On"}
+                {isMicMuted ? "🔇" : "🎤"} Microphone:{" "}
+                {isMicMuted ? "Muted" : "On"}
               </span>
 
               <span
@@ -1622,14 +1932,16 @@ export default function AgentLiveStreaming({ astrologerId }) {
                     : "bg-green-100 text-green-700"
                 }`}
               >
-                <span>{isCameraPaused ? "⏸" : "📹"}</span>
-                Camera: {isCameraPaused ? "Paused" : "On"}
+                {isCameraPaused ? "⏸" : "📹"} Camera:{" "}
+                {isCameraPaused ? "Paused" : "On"}
               </span>
             </div>
           )}
         </div>
 
-        {/* LIVE CHAT */}
+        {/* =================================================
+            LIVE CHAT
+        ================================================= */}
 
         <div className="bg-white rounded-xl shadow p-4 h-[650px] flex flex-col">
           <h3 className="text-xl font-bold mb-4">Live Chat</h3>
@@ -1694,11 +2006,153 @@ export default function AgentLiveStreaming({ astrologerId }) {
           )}
         </div>
 
-        {/* RIGHT PANEL */}
+        {/* =================================================
+            RIGHT PANEL
+        ================================================= */}
 
         <div className="space-y-6">
-          {/* SCHEDULE LIVE FORM */}
+          {/* Incoming interaction requests */}
+          <div className="bg-white rounded-xl shadow p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">
+                Viewer Requests
+              </h3>
 
+              {pendingInteractions.length > 0 && (
+                <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full">
+                  {pendingInteractions.length} New
+                </span>
+              )}
+            </div>
+
+            {!isLive ? (
+              <p className="text-sm text-gray-500">
+                Start your live session to receive viewer requests.
+              </p>
+            ) : pendingInteractions.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No pending audio/video requests.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {pendingInteractions.map((request) => (
+                  <div
+                    key={request.id}
+                    className="border rounded-lg p-3 bg-gray-50"
+                  >
+                    <div className="flex justify-between items-center gap-2">
+                      <div>
+                        <p className="font-semibold text-gray-800">
+                          Viewer Request
+                        </p>
+
+                        <p className="text-sm text-gray-600 mt-1">
+                          Type:{" "}
+                          <span className="font-semibold">
+                            {request.interactionType === "VIDEO"
+                              ? "📹 Video"
+                              : "🎤 Audio"}
+                          </span>
+                        </p>
+
+                        <p className="text-xs text-gray-500 mt-1">
+                          Requested:{" "}
+                          {request.requestedAt
+                            ? new Date(
+                                request.requestedAt,
+                              ).toLocaleTimeString("en-IN")
+                            : "-"}
+                        </p>
+                      </div>
+
+                      <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
+                        Pending
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRespondInteraction(request, "ACCEPT")
+                        }
+                        disabled={
+                          Boolean(interactionLoadingId) ||
+                          Boolean(activeInteraction)
+                        }
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                      >
+                        {interactionLoadingId === request.id
+                          ? "Processing..."
+                          : "Accept"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleRespondInteraction(request, "REJECT")
+                        }
+                        disabled={Boolean(interactionLoadingId)}
+                        className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {interactionNotice && (
+              <p className="mt-3 text-sm text-blue-700 bg-blue-50 rounded-lg p-3">
+                {interactionNotice}
+              </p>
+            )}
+          </div>
+
+          {/* Active interaction */}
+          {activeInteraction && (
+            <div className="bg-white rounded-xl shadow p-4 border border-green-200">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-bold">
+                  Active Interaction
+                </h3>
+
+                <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">
+                  Accepted
+                </span>
+              </div>
+
+              <p className="text-sm text-gray-700">
+                Interaction type:{" "}
+                <strong>{activeInteraction.interactionType}</strong>
+              </p>
+
+              <p className="text-xs text-gray-500 mt-1">
+                Viewer Agora UID: {activeInteraction.agoraUid}
+              </p>
+
+              <p className="text-sm text-green-700 mt-3">
+                {remoteVideoUid ||
+                remoteAudioTrackRef.current
+                  ? "Viewer media connected."
+                  : "Waiting for viewer to publish audio/video..."}
+              </p>
+
+              <button
+                type="button"
+                onClick={handleEndInteraction}
+                disabled={Boolean(interactionLoadingId)}
+                className="w-full mt-4 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-semibold disabled:opacity-50"
+              >
+                {interactionLoadingId === activeInteraction.id
+                  ? "Ending..."
+                  : "End Viewer Interaction"}
+              </button>
+            </div>
+          )}
+
+          {/* Schedule live */}
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="text-xl font-bold mb-4">Schedule Live</h3>
 
@@ -1754,21 +2208,18 @@ export default function AgentLiveStreaming({ astrologerId }) {
             </button>
           </div>
 
-          {/* STATISTICS */}
-
+          {/* Statistics */}
           <div className="bg-white rounded-xl shadow p-4">
             <h3 className="text-xl font-bold mb-4">Statistics</h3>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-100 p-3 rounded-lg">
                 <p>Total Viewers</p>
-
                 <h2 className="text-2xl font-bold">{viewerCount}</h2>
               </div>
 
               <div className="bg-gray-100 p-3 rounded-lg">
                 <p>Status</p>
-
                 <h2 className="text-xl font-bold">
                   {isLive ? "LIVE" : "OFFLINE"}
                 </h2>
@@ -1778,13 +2229,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
         </div>
       </div>
 
-      {/* ============================================
+      {/* =================================================
           SCHEDULED LIVE STREAMS TABLE
-      ============================================ */}
+      ================================================= */}
 
       <div className="mt-8 bg-white rounded-xl shadow p-6">
-        {/* TABLE HEADER */}
-
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
           <div>
             <h2 className="text-2xl font-bold text-gray-800">
@@ -1806,8 +2255,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
           </button>
         </div>
 
-        {/* EDIT FORM */}
-
+        {/* Edit form */}
         {editingLiveId && (
           <form
             onSubmit={handleUpdateScheduledLive}
@@ -1898,8 +2346,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
           </form>
         )}
 
-        {/* TABLE CONTENT */}
-
+        {/* Table */}
         {scheduledLivesLoading ? (
           <div className="text-center py-10 text-gray-500">
             Loading scheduled live streams...
@@ -1920,29 +2367,24 @@ export default function AgentLiveStreaming({ astrologerId }) {
               <thead>
                 <tr className="bg-gray-100 text-gray-700">
                   <th className="border px-4 py-3 whitespace-nowrap">#</th>
-
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Live Title
                   </th>
-
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Scheduled Date
                   </th>
-
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Start Time
                   </th>
-
                   <th className="border px-4 py-3 whitespace-nowrap">
                     End Time
                   </th>
-
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Channel Name
                   </th>
-
-                  <th className="border px-4 py-3 whitespace-nowrap">Status</th>
-
+                  <th className="border px-4 py-3 whitespace-nowrap">
+                    Status
+                  </th>
                   <th className="border px-4 py-3 whitespace-nowrap text-center">
                     Actions
                   </th>
@@ -1987,7 +2429,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
                         <button
                           type="button"
                           onClick={() => handleEditClick(live)}
-                          disabled={updatingLive || deletingLiveId === live.id}
+                          disabled={
+                            updatingLive || deletingLiveId === live.id
+                          }
                           className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50"
                         >
                           Edit
@@ -1996,7 +2440,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
                         <button
                           type="button"
                           onClick={() => handleDeleteScheduledLive(live)}
-                          disabled={deletingLiveId === live.id || updatingLive}
+                          disabled={
+                            deletingLiveId === live.id || updatingLive
+                          }
                           className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50"
                         >
                           {deletingLiveId === live.id
@@ -2011,8 +2457,6 @@ export default function AgentLiveStreaming({ astrologerId }) {
             </table>
           </div>
         )}
-
-        {/* TOTAL COUNT */}
 
         <div className="mt-4 text-sm text-gray-500">
           Total scheduled live streams:{" "}
