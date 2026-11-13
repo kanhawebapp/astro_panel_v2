@@ -76,9 +76,14 @@ export default function AgentLiveStreaming({ astrologerId }) {
   const messagesSeenRef = useRef(new Set());
   const restoreAttemptRef = useRef(false);
   const restoreTimerRef = useRef(null);
+
   const remoteVideoTrackRef = useRef(null);
   const remoteAudioTrackRef = useRef(null);
+
   const activeInteractionRef = useRef(null);
+
+  // Tracks the Agora UID of the viewer participating in the interaction.
+  const remoteViewerUidRef = useRef(null);
 
   const apolloClient = useApolloClient();
 
@@ -99,6 +104,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
   const [updateScheduledLive] = useMutation(UPDATE_SCHEDULED_LIVE);
   const [deleteScheduledLive] = useMutation(DELETE_SCHEDULED_LIVE);
+
   const [startLiveToggleServices] = useMutation(
     START_LIVE_TOGGLE_SERVICES,
   );
@@ -247,52 +253,158 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
     remoteVideoTrackRef.current = null;
     remoteAudioTrackRef.current = null;
+    remoteViewerUidRef.current = null;
+
     setRemoteVideoUid(null);
+
+    const container = document.getElementById(
+      "interaction-viewer-container",
+    );
+
+    if (container) {
+      container.innerHTML = "";
+    }
   }, []);
 
+  // Subscribe to the accepted viewer's published audio/video tracks.
   const handleUserPublished = useCallback(async (user, mediaType) => {
     const client = rtcClientRef.current;
+    const active = activeInteractionRef.current;
 
-    if (!client) return;
+    if (!client || !active || !user) return;
+
+    // The request must contain the viewer's Agora UID.
+    // uid is supported as a fallback for older API responses.
+    const expectedUid = active.agoraUid ?? active.uid;
+
+    // Ignore all other viewers.
+    if (
+      expectedUid != null &&
+      String(expectedUid) !== String(user.uid)
+    ) {
+      return;
+    }
 
     try {
-      // Subscribe to the viewer's published track.
       await client.subscribe(user, mediaType);
 
+      remoteViewerUidRef.current = String(user.uid);
+
+      // -----------------------------
+      // Viewer audio
+      // -----------------------------
       if (mediaType === "audio") {
+        if (remoteAudioTrackRef.current) {
+          try {
+            remoteAudioTrackRef.current.stop();
+          } catch {}
+        }
+
         remoteAudioTrackRef.current = user.audioTrack;
 
-        // Play viewer's microphone audio on the astrologer's device.
-        user.audioTrack?.play();
+        if (user.audioTrack) {
+          user.audioTrack.play();
+        }
+
+        setInteractionNotice("Viewer microphone connected.");
 
         console.log("Subscribed to viewer audio:", user.uid);
       }
 
+      // -----------------------------
+      // Viewer video
+      // -----------------------------
       if (mediaType === "video") {
+        if (remoteVideoTrackRef.current) {
+          try {
+            remoteVideoTrackRef.current.stop();
+          } catch {}
+        }
+
         remoteVideoTrackRef.current = user.videoTrack;
 
-        const uid = String(user.uid);
-        setRemoteVideoUid(uid);
+        setRemoteVideoUid(String(user.uid));
 
-        console.log("Subscribed to viewer video:", uid);
+        setInteractionNotice("Viewer video connected.");
 
-        // Wait for React to render the remote video container.
-        requestAnimationFrame(() => {
-          const container = document.getElementById(
-            `interaction-viewer-${uid}`,
-          );
-
-          if (container && user.videoTrack) {
-            user.videoTrack.play(container);
-          }
-        });
+        console.log("Subscribed to viewer video:", user.uid);
       }
     } catch (error) {
       console.error("Unable to subscribe to viewer track:", error);
+
+      setInteractionNotice(
+        error?.message ||
+          "Unable to connect to the viewer's audio/video.",
+      );
     }
   }, []);
 
+  // Play remote video after React renders the video container.
+  useEffect(() => {
+    if (!remoteVideoUid) return;
+
+    if (activeInteraction?.interactionType !== "VIDEO") {
+      return;
+    }
+
+    const videoTrack = remoteVideoTrackRef.current;
+
+    if (!videoTrack) return;
+
+    const containerId = `interaction-viewer-${remoteVideoUid}`;
+
+    let cancelled = false;
+    let attempts = 0;
+    let timer = null;
+
+    const playVideo = () => {
+      if (cancelled) return;
+
+      const container = document.getElementById(containerId);
+
+      if (!container) {
+        attempts += 1;
+
+        if (attempts < 20) {
+          timer = window.setTimeout(playVideo, 100);
+        }
+
+        return;
+      }
+
+      try {
+        videoTrack.play(container);
+      } catch (error) {
+        console.error("Unable to play viewer video:", error);
+
+        setInteractionNotice("Unable to display viewer video.");
+      }
+    };
+
+    playVideo();
+
+    return () => {
+      cancelled = true;
+
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [remoteVideoUid, activeInteraction?.interactionType]);
+
+  // Handle viewer disabling their microphone or camera.
+  // Do not clear the active interaction here because the viewer
+  // may temporarily mute or disable their camera.
   const handleUserUnpublished = useCallback((user, mediaType) => {
+    if (!user) return;
+
+    if (
+      remoteViewerUidRef.current != null &&
+      String(remoteViewerUidRef.current) !== String(user.uid)
+    ) {
+      return;
+    }
+
     if (mediaType === "audio") {
       try {
         user.audioTrack?.stop();
@@ -301,6 +413,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
       if (remoteAudioTrackRef.current === user.audioTrack) {
         remoteAudioTrackRef.current = null;
       }
+
+      setInteractionNotice(
+        "Viewer microphone is currently unavailable.",
+      );
     }
 
     if (mediaType === "video") {
@@ -312,22 +428,33 @@ export default function AgentLiveStreaming({ astrologerId }) {
         remoteVideoTrackRef.current = null;
         setRemoteVideoUid(null);
       }
+
+      setInteractionNotice(
+        "Viewer camera is currently unavailable.",
+      );
     }
   }, []);
 
+  // Handle viewer leaving Agora RTC.
   const handleUserLeft = useCallback(
     (user) => {
       const active = activeInteractionRef.current;
 
+      const expectedUid = active?.agoraUid ?? active?.uid;
+
       if (
-        active?.agoraUid != null &&
-        String(active.agoraUid) === String(user.uid)
+        active &&
+        expectedUid != null &&
+        String(expectedUid) === String(user.uid)
       ) {
         stopRemoteTracks();
+
         setInteractionNotice(
           "The viewer has disconnected from the live interaction.",
         );
+
         setActiveInteraction(null);
+        activeInteractionRef.current = null;
       }
 
       const client = rtcClientRef.current;
@@ -339,6 +466,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
     [stopRemoteTracks],
   );
 
+  // Register Agora RTC event listeners.
   const registerRtcEvents = useCallback(
     (rtcClient) => {
       rtcClient.on("user-joined", () => {
@@ -366,6 +494,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
       return;
     }
 
+    if (action === "ACCEPT" && activeInteractionRef.current) {
+      alert("You already have an active viewer interaction.");
+      return;
+    }
+
     try {
       setInteractionLoadingId(request.id);
       setInteractionNotice("");
@@ -390,13 +523,24 @@ export default function AgentLiveStreaming({ astrologerId }) {
       );
 
       if (action === "ACCEPT") {
-        setActiveInteraction({
+        const acceptedInteraction = {
           ...request,
           ...updatedRequest,
-        });
+        };
+
+        // Set ref immediately. Agora event handlers may execute
+        // before React's next render/effect.
+        activeInteractionRef.current = acceptedInteraction;
+
+        setActiveInteraction(acceptedInteraction);
+
+        setRemoteVideoUid(null);
+        remoteVideoTrackRef.current = null;
+        remoteAudioTrackRef.current = null;
+        remoteViewerUidRef.current = null;
 
         setInteractionNotice(
-          `${request.interactionType} interaction accepted. Waiting for the viewer to connect...`,
+          `${acceptedInteraction.interactionType} interaction accepted. Waiting for the viewer to connect...`,
         );
       } else {
         setInteractionNotice("Interaction request rejected.");
@@ -446,8 +590,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
       });
 
       stopRemoteTracks();
-      setActiveInteraction(null);
+
       activeInteractionRef.current = null;
+      setActiveInteraction(null);
 
       setInteractionNotice("Viewer interaction ended successfully.");
 
@@ -659,6 +804,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         });
 
         rtcClientRef.current = rtcClient;
+
         registerRtcEvents(rtcClient);
 
         await rtcClient.setClientRole("host");
@@ -676,6 +822,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         }
 
         await connectChat(restoredLive);
+
         restoredChatClient = chatClientRef.current;
 
         if (cancelled) return;
@@ -740,14 +887,20 @@ export default function AgentLiveStreaming({ astrologerId }) {
           micTrack?.stop();
           micTrack?.close();
         } catch (cleanupError) {
-          console.warn("Restore microphone cleanup warning:", cleanupError);
+          console.warn(
+            "Restore microphone cleanup warning:",
+            cleanupError,
+          );
         }
 
         try {
           cameraTrack?.stop();
           cameraTrack?.close();
         } catch (cleanupError) {
-          console.warn("Restore camera cleanup warning:", cleanupError);
+          console.warn(
+            "Restore camera cleanup warning:",
+            cleanupError,
+          );
         }
 
         if (restoredChatClient) {
@@ -794,7 +947,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
           setRecoveryRequired(Boolean(savedSession?.streamId));
         }
       } finally {
-        if (!cancelled) setRestoringLive(false);
+        if (!cancelled) {
+          setRestoringLive(false);
+        }
+
         restoreAttemptRef.current = false;
       }
     };
@@ -829,6 +985,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
       const shouldMute = !isMicMuted;
 
       await micTrack.setEnabled(!shouldMute);
+
       setIsMicMuted(shouldMute);
     } catch (error) {
       console.error("Microphone toggle error:", error);
@@ -915,7 +1072,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setIsMicMuted(false);
       setIsCameraPaused(false);
       setPendingInteractions([]);
+
+      activeInteractionRef.current = null;
       setActiveInteraction(null);
+
+      stopRemoteTracks();
+
       setInteractionNotice("");
 
       const astroUser = JSON.parse(
@@ -1045,9 +1207,11 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       // 6. Create microphone and camera tracks.
       const mic = await AgoraRTC.createMicrophoneAudioTrack();
+
       micTrackRef.current = mic;
 
       const camera = await AgoraRTC.createCameraVideoTrack();
+
       cameraTrackRef.current = camera;
 
       await mic.setEnabled(true);
@@ -1084,6 +1248,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
       try {
         cameraTrackRef.current?.stop();
         cameraTrackRef.current?.close();
+
         micTrackRef.current?.stop();
         micTrackRef.current?.close();
 
@@ -1099,7 +1264,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
                 roomId: String(currentLive.chatRoomId),
               });
             } catch (leaveError) {
-              console.warn("Start failure chat-room cleanup:", leaveError);
+              console.warn(
+                "Start failure chat-room cleanup:",
+                leaveError,
+              );
             }
           }
 
@@ -1116,7 +1284,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
           try {
             await rtcClient.leave();
           } catch (rtcCleanupError) {
-            console.warn("Start failure RTC cleanup:", rtcCleanupError);
+            console.warn(
+              "Start failure RTC cleanup:",
+              rtcCleanupError,
+            );
           }
         }
 
@@ -1129,6 +1300,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
             });
 
             localStorage.removeItem("dhwaniastro_active_live");
+
             await refetch();
           } catch (endCleanupError) {
             console.warn(
@@ -1165,11 +1337,18 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setLiveInfo(null);
       setStreamId(null);
       setIsLive(false);
+
       setRecoveryRequired(
         Boolean(localStorage.getItem("dhwaniastro_active_live")),
       );
+
       setIsMicMuted(false);
       setIsCameraPaused(false);
+
+      activeInteractionRef.current = null;
+      setActiveInteraction(null);
+
+      stopRemoteTracks();
 
       const localPlayer = document.getElementById("local-player");
 
@@ -1261,8 +1440,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       const currentStreamId = streamId || savedSession.streamId;
 
-      // 1. Stop remote viewer tracks.
+      // 1. Stop remote viewer tracks and interaction.
       stopRemoteTracks();
+
+      activeInteractionRef.current = null;
+      setActiveInteraction(null);
+      setPendingInteractions([]);
 
       // 2. Stop camera.
       if (cameraTrackRef.current) {
@@ -1350,10 +1533,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       localStorage.removeItem("dhwaniastro_active_live");
 
-      // The backend endLive resolver should also mark all PENDING and
-      // ACCEPTED interaction requests for this stream as ENDED.
+      // The backend endLive resolver should also mark all PENDING
+      // and ACCEPTED interaction requests for this stream as ENDED.
 
-      // 7. Restore astrologer's CHAT/CALL services.
+      // 7. Restore astrologer's LIVE service.
       if (!astrologerIdForEnd) {
         throw new Error(
           "Astrologer ID is missing; the stream ended but services could not be restored.",
@@ -1386,9 +1569,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
       setIsCameraPaused(false);
       setMessage("");
       setPendingInteractions([]);
+
       setActiveInteraction(null);
       activeInteractionRef.current = null;
+
       setInteractionNotice("");
+
       messagesSeenRef.current.clear();
 
       const localPlayer = document.getElementById("local-player");
@@ -1420,6 +1606,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         setRecoveryRequired(false);
         setViewerCount(0);
         setPendingInteractions([]);
+
         setActiveInteraction(null);
         activeInteractionRef.current = null;
 
@@ -1699,6 +1886,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
       remoteVideoTrackRef.current = null;
       remoteAudioTrackRef.current = null;
+      remoteViewerUidRef.current = null;
 
       if (cameraTrack) {
         try {
@@ -2129,12 +2317,14 @@ export default function AgentLiveStreaming({ astrologerId }) {
               </p>
 
               <p className="text-xs text-gray-500 mt-1">
-                Viewer Agora UID: {activeInteraction.agoraUid}
+                Viewer Agora UID:{" "}
+                {activeInteraction.agoraUid ??
+                  activeInteraction.uid ??
+                  "Not provided"}
               </p>
 
               <p className="text-sm text-green-700 mt-3">
-                {remoteVideoUid ||
-                remoteAudioTrackRef.current
+                {remoteVideoUid || remoteAudioTrackRef.current
                   ? "Viewer media connected."
                   : "Waiting for viewer to publish audio/video..."}
               </p>
@@ -2367,24 +2557,31 @@ export default function AgentLiveStreaming({ astrologerId }) {
               <thead>
                 <tr className="bg-gray-100 text-gray-700">
                   <th className="border px-4 py-3 whitespace-nowrap">#</th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Live Title
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Scheduled Date
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Start Time
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     End Time
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Channel Name
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap">
                     Status
                   </th>
+
                   <th className="border px-4 py-3 whitespace-nowrap text-center">
                     Actions
                   </th>
