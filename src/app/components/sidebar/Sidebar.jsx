@@ -37,6 +37,11 @@ const menuItems = [
         label: "Call History",
         icon: <IoCall />,
       },
+         {
+        href: "/dashboard/livehistory",
+        label: "Live History",
+        icon: <FaStore />,
+      },
       {
         href: "/dashboard/storehistory",
         label: "Store History",
