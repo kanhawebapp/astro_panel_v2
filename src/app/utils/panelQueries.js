@@ -414,10 +414,31 @@ export const RESPOND_LIVE_INTERACTION_REQUEST = gql`
       action: $action
     ) {
       id
-      status
+      liveStreamId
+      astrologerId
+      userId
       interactionType
+      status
+      agoraUid
+      acceptedAt
+      requestedAt
+    }
+  }
+`;
+
+export const END_LIVE_INTERACTION = gql`
+  mutation EndLiveInteraction($requestId: ID!) {
+    endLiveInteraction(requestId: $requestId) {
+      id
+      liveStreamId
+      astrologerId
+      userId
+      interactionType
+      status
+      agoraUid
       acceptedAt
       endedAt
+      requestedAt
     }
   }
 `;

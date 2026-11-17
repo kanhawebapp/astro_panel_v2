@@ -482,83 +482,157 @@ export default function AgentLiveStreaming({ astrologerId }) {
     [handleUserLeft, handleUserPublished, handleUserUnpublished],
   );
 
-  // =====================================================
-  // ACCEPT / REJECT INTERACTION REQUEST
-  // =====================================================
+ // =====================================================
+// ACCEPT / REJECT INTERACTION REQUEST
+// =====================================================
 
-  const handleRespondInteraction = async (request, action) => {
-    if (!request?.id || interactionLoadingId) return;
+const handleRespondInteraction = async (request, action) => {
+  if (!request?.id) {
+    console.error("Cannot respond to interaction: request ID is missing.");
+    return;
+  }
 
-    if (!isLive || !rtcClientRef.current) {
-      alert("Your live session is not active.");
-      return;
+  if (!["ACCEPT", "REJECT"].includes(action)) {
+    console.error("Invalid interaction action:", action);
+    return;
+  }
+
+  // Prevent multiple simultaneous responses.
+  if (interactionLoadingId) {
+    return;
+  }
+
+  // Live session is required for both ACCEPT and REJECT.
+  if (!isLive) {
+    alert("Your live session is not active.");
+    return;
+  }
+
+  // Agora RTC client is required only for ACCEPT.
+  // REJECT must work even if the RTC client is unavailable.
+  if (action === "ACCEPT" && !rtcClientRef.current) {
+    alert("Agora connection is not ready. Please wait and try again.");
+    return;
+  }
+
+  // Do not accept another interaction while one is active.
+  if (action === "ACCEPT" && activeInteractionRef.current) {
+    alert("You already have an active viewer interaction.");
+    return;
+  }
+
+  try {
+    setInteractionLoadingId(request.id);
+    setInteractionNotice("");
+
+    console.log("Responding to interaction:", {
+      requestId: request.id,
+      action,
+      interactionType: request.interactionType,
+    });
+
+    // =========================================
+    // CALL GRAPHQL MUTATION
+    // =========================================
+
+    const { data: responseData } =
+      await respondLiveInteractionRequest({
+        variables: {
+          requestId: request.id,
+          action,
+        },
+        fetchPolicy: "no-cache",
+      });
+
+    const updatedRequest =
+      responseData?.respondLiveInteractionRequest;
+
+    if (!updatedRequest) {
+      throw new Error("Unable to process interaction request.");
     }
 
-    if (action === "ACCEPT" && activeInteractionRef.current) {
-      alert("You already have an active viewer interaction.");
-      return;
+    console.log("Interaction response successful:", updatedRequest);
+
+    // =========================================
+    // REMOVE PROCESSED REQUEST FROM UI
+    // =========================================
+
+    setPendingInteractions((previous) =>
+      previous.filter((item) => item.id !== request.id),
+    );
+
+    // =========================================
+    // ACCEPT FLOW
+    // =========================================
+
+    if (action === "ACCEPT") {
+      const acceptedInteraction = {
+        ...request,
+        ...updatedRequest,
+      };
+
+      // Update ref immediately for Agora callbacks.
+      activeInteractionRef.current = acceptedInteraction;
+
+      setActiveInteraction(acceptedInteraction);
+
+      // Clear previous remote tracks.
+      stopRemoteTracks();
+
+      setInteractionNotice(
+        `${
+          acceptedInteraction.interactionType || "Viewer"
+        } interaction accepted. Waiting for the viewer to connect...`,
+      );
     }
+
+    // =========================================
+    // REJECT FLOW
+    // =========================================
+
+    if (action === "REJECT") {
+      setInteractionNotice(
+        "Interaction request rejected successfully.",
+      );
+    }
+
+    // =========================================
+    // REFRESH PENDING REQUESTS
+    // =========================================
 
     try {
-      setInteractionLoadingId(request.id);
-      setInteractionNotice("");
-
-      const { data: responseData } =
-        await respondLiveInteractionRequest({
-          variables: {
-            requestId: request.id,
-            action,
-          },
-        });
-
-      const updatedRequest =
-        responseData?.respondLiveInteractionRequest;
-
-      if (!updatedRequest) {
-        throw new Error("Unable to process interaction request.");
-      }
-
-      setPendingInteractions((previous) =>
-        previous.filter((item) => item.id !== request.id),
-      );
-
-      if (action === "ACCEPT") {
-        const acceptedInteraction = {
-          ...request,
-          ...updatedRequest,
-        };
-
-        // Set ref immediately. Agora event handlers may execute
-        // before React's next render/effect.
-        activeInteractionRef.current = acceptedInteraction;
-
-        setActiveInteraction(acceptedInteraction);
-
-        setRemoteVideoUid(null);
-        remoteVideoTrackRef.current = null;
-        remoteAudioTrackRef.current = null;
-        remoteViewerUidRef.current = null;
-
-        setInteractionNotice(
-          `${acceptedInteraction.interactionType} interaction accepted. Waiting for the viewer to connect...`,
-        );
-      } else {
-        setInteractionNotice("Interaction request rejected.");
-      }
-
       await refetchInteractions();
-    } catch (error) {
-      console.error("Respond interaction error:", error);
-
-      alert(
-        error?.graphQLErrors?.[0]?.message ||
-          error?.message ||
-          `Unable to ${action.toLowerCase()} interaction request.`,
+    } catch (refreshError) {
+      console.warn(
+        "Unable to refresh pending interaction requests:",
+        refreshError,
       );
-    } finally {
-      setInteractionLoadingId(null);
     }
-  };
+  } catch (error) {
+    console.error("Respond interaction error:", error);
+
+    // Restore request if mutation failed.
+    setPendingInteractions((previous) => {
+      const alreadyExists = previous.some(
+        (item) => item.id === request.id,
+      );
+
+      return alreadyExists
+        ? previous
+        : [request, ...previous];
+    });
+
+    const errorMessage =
+      error?.graphQLErrors?.[0]?.message ||
+      error?.networkError?.result?.errors?.[0]?.message ||
+      error?.message ||
+      `Unable to ${action.toLowerCase()} interaction request.`;
+
+    alert(errorMessage);
+  } finally {
+    setInteractionLoadingId(null);
+  }
+};
 
   // =====================================================
   // END ACTIVE INTERACTION
@@ -2199,104 +2273,109 @@ export default function AgentLiveStreaming({ astrologerId }) {
         ================================================= */}
 
         <div className="space-y-6">
-          {/* Incoming interaction requests */}
-          <div className="bg-white rounded-xl shadow p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">
-                Viewer Requests
-              </h3>
+        {/* Incoming interaction requests */}
+<div className="bg-white rounded-xl shadow p-4">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-xl font-bold">
+      Viewer Requests
+    </h3>
 
-              {pendingInteractions.length > 0 && (
-                <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full">
-                  {pendingInteractions.length} New
+    {pendingInteractions.length > 0 && (
+      <span className="bg-red-100 text-red-700 text-xs font-bold px-3 py-1 rounded-full">
+        {pendingInteractions.length} New
+      </span>
+    )}
+  </div>
+
+  {!isLive ? (
+    <p className="text-sm text-gray-500">
+      Start your live session to receive viewer requests.
+    </p>
+  ) : pendingInteractions.length === 0 ? (
+    <p className="text-sm text-gray-500">
+      No pending audio/video requests.
+    </p>
+  ) : (
+    <div className="space-y-3">
+      {pendingInteractions.map((request) => (
+        <div
+          key={request.id}
+          className="border rounded-lg p-3 bg-gray-50"
+        >
+          <div className="flex justify-between items-center gap-2">
+            <div>
+              <p className="font-semibold text-gray-800">
+                Viewer Request
+              </p>
+
+              <p className="text-sm text-gray-600 mt-1">
+                Type:{" "}
+                <span className="font-semibold">
+                  {request.interactionType === "VIDEO"
+                    ? "📹 Video"
+                    : "🎤 Audio"}
                 </span>
-              )}
+              </p>
+
+              <p className="text-xs text-gray-500 mt-1">
+                Requested:{" "}
+                {request.requestedAt
+                  ? new Date(
+                      request.requestedAt,
+                    ).toLocaleTimeString("en-IN")
+                  : "-"}
+              </p>
             </div>
 
-            {!isLive ? (
-              <p className="text-sm text-gray-500">
-                Start your live session to receive viewer requests.
-              </p>
-            ) : pendingInteractions.length === 0 ? (
-              <p className="text-sm text-gray-500">
-                No pending audio/video requests.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {pendingInteractions.map((request) => (
-                  <div
-                    key={request.id}
-                    className="border rounded-lg p-3 bg-gray-50"
-                  >
-                    <div className="flex justify-between items-center gap-2">
-                      <div>
-                        <p className="font-semibold text-gray-800">
-                          Viewer Request
-                        </p>
-
-                        <p className="text-sm text-gray-600 mt-1">
-                          Type:{" "}
-                          <span className="font-semibold">
-                            {request.interactionType === "VIDEO"
-                              ? "📹 Video"
-                              : "🎤 Audio"}
-                          </span>
-                        </p>
-
-                        <p className="text-xs text-gray-500 mt-1">
-                          Requested:{" "}
-                          {request.requestedAt
-                            ? new Date(
-                                request.requestedAt,
-                              ).toLocaleTimeString("en-IN")
-                            : "-"}
-                        </p>
-                      </div>
-
-                      <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
-                        Pending
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2 mt-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleRespondInteraction(request, "ACCEPT")
-                        }
-                        disabled={
-                          Boolean(interactionLoadingId) ||
-                          Boolean(activeInteraction)
-                        }
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                      >
-                        {interactionLoadingId === request.id
-                          ? "Processing..."
-                          : "Accept"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleRespondInteraction(request, "REJECT")
-                        }
-                        disabled={Boolean(interactionLoadingId)}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {interactionNotice && (
-              <p className="mt-3 text-sm text-blue-700 bg-blue-50 rounded-lg p-3">
-                {interactionNotice}
-              </p>
-            )}
+            <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">
+              Pending
+            </span>
           </div>
+
+          <div className="flex gap-2 mt-3">
+            {/* ACCEPT BUTTON */}
+            <button
+              type="button"
+              onClick={() =>
+                handleRespondInteraction(request, "ACCEPT")
+              }
+              disabled={
+                Boolean(interactionLoadingId) ||
+                Boolean(activeInteraction)
+              }
+              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            >
+              {interactionLoadingId === request.id
+                ? "Processing..."
+                : "Accept"}
+            </button>
+
+            {/* REJECT BUTTON */}
+            <button
+              type="button"
+              onClick={() =>
+                handleRespondInteraction(request, "REJECT")
+              }
+              disabled={Boolean(interactionLoadingId)}
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+            >
+              {interactionLoadingId === request.id
+                ? "Processing..."
+                : "Reject"}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+
+  {/* Interaction notification */}
+  {interactionNotice && (
+    <p className="mt-3 text-sm text-blue-700 bg-blue-50 rounded-lg p-3">
+      {interactionNotice}
+    </p>
+  )}
+</div>
 
           {/* Active interaction */}
           {activeInteraction && (
