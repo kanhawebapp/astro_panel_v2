@@ -14,7 +14,14 @@ body {
   /* * {
     border: 1px solid red !important;
   } */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
 
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 .wallet-head {
   font-size: 1rem;
