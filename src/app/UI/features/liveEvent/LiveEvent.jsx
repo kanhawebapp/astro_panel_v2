@@ -2527,6 +2527,10 @@ export default function AgentLiveStreaming({ astrologerId }) {
                             msg.type === "gift"
                               ? "border-amber-100 bg-amber-200"
                               : "border-gray-100 bg-gradient-to-r from-purple-300 via-yellow-200 to-violet-300"
+                          } ${
+                            msg.sender?.toLowerCase().includes("astrologer")
+                              ? "ml-auto"
+                              : "mr-auto"
                           }`}
                         >
                           <p className="text-[10px] text-purple-600">
