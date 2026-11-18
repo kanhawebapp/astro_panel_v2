@@ -89,6 +89,8 @@ export default function AgentLiveStreaming({ astrologerId }) {
   }, [activeInteraction]);
 
   const messagesContainerRef = useRef(null);
+ 
+  
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -692,9 +694,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
 
     chatClient.addEventHandler("agent-live-chat-handler", {
       onTextMessage: (msg) => {
+       
+        
         if (msg.chatType !== "chatRoom") return;
 
         if (String(msg.to) !== String(live.chatRoomId)) return;
+         console.log("123456789", msg, msg.from , msg.to);
 
         const messageId =
           msg.id ||
@@ -2521,33 +2526,35 @@ export default function AgentLiveStreaming({ astrologerId }) {
                       </div>
                     ) : (
                       messages.map((msg) => (
-                        <div
-                          key={msg.id}
-                          className={`w-fit max-w-[90%] rounded-xl border px-3 py-1 ${
-                            msg.type === "gift"
-                              ? "border-amber-100 bg-amber-200"
-                              : "border-gray-100 bg-gradient-to-r from-purple-300 via-yellow-200 to-violet-300"
-                          }`}
-                        >
-                          <p className="text-[10px] text-purple-600">
-                            {msg.sender
-                              ?.split("_")[0]
-                              ?.replace(/^./, (char) => char.toUpperCase())}
-                          </p>
+                <div
+  key={msg.id}
+  className={`w-fit max-w-[90%] rounded-xl border px-3 py-1 ${
+    msg.type === "gift"
+      ? "border-amber-100 bg-amber-200"
+      : "border-gray-100 bg-gradient-to-r from-purple-300 via-yellow-200 to-violet-300"
+  } ${
+    msg.sender?.toLowerCase().includes("astrologer")
+      ? "ml-auto"
+      : "mr-auto"
+  }`}
+>
+  <p className="text-[10px] text-purple-600">
+    {msg.sender
+      ?.split("_")[0]
+      ?.replace(/^./, (char) => char.toUpperCase())}
+  </p>
 
-                          <p
-                            className={`break-words text-xs ${
-                              msg.type === "gift"
-                                ? "text-amber-700"
-                                : "text-black"
-                            }`}
-                          >
-                            {msg.type === "gift" && (
-                              <i className="fa-solid fa-gift mr-2" />
-                            )}
-                            {msg.text}
-                          </p>
-                        </div>
+  <p
+    className={`break-words text-xs ${
+      msg.type === "gift" ? "text-amber-700" : "text-black"
+    }`}
+  >
+    {msg.type === "gift" && (
+      <i className="fa-solid fa-gift mr-2" />
+    )}
+    {msg.text}
+  </p>
+</div>
                       ))
                     )}
                   </div>
