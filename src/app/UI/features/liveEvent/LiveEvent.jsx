@@ -23,11 +23,12 @@ export default function AgentLiveStreaming({ astrologerId }) {
   const [title, setTitle] = useState("");
   const [streamId, setStreamId] = useState(null);
   const [isLive, setIsLive] = useState(false);
-  const [messages, setMessages] = useState([]);
+
   const [message, setMessage] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [liveInfo, setLiveInfo] = useState(null);
-
+const [messages, setMessages] = useState([]);
+const [loadedMessagesFor, setLoadedMessagesFor] = useState(null);
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [restoringLive, setRestoringLive] = useState(false);
@@ -143,6 +144,56 @@ export default function AgentLiveStreaming({ astrologerId }) {
       },
     },
   );
+
+
+// =====================================================
+// PERSIST LIVE CHAT MESSAGES
+// =====================================================
+
+// Restore messages for the current live stream
+useEffect(() => {
+  if (!streamId) {
+    setMessages([]);
+    setLoadedMessagesFor(null);
+    return;
+  }
+
+  const storageKey = `liveChatMessages_${streamId}`;
+
+  try {
+    const savedMessages = localStorage.getItem(storageKey);
+
+    const parsedMessages = savedMessages
+      ? JSON.parse(savedMessages)
+      : [];
+
+    setMessages(
+      Array.isArray(parsedMessages) ? parsedMessages : []
+    );
+
+    setLoadedMessagesFor(streamId);
+  } catch (error) {
+    console.error("Error restoring live chat messages:", error);
+    setMessages([]);
+    setLoadedMessagesFor(streamId);
+  }
+}, [streamId]);
+
+
+
+
+// Save messages whenever chat changes
+useEffect(() => {
+  if (!streamId || loadedMessagesFor !== streamId) return;
+
+  const storageKey = `liveChatMessages_${streamId}`;
+
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(messages));
+  } catch (error) {
+    console.error("Error saving live chat messages:", error);
+  }
+}, [messages, streamId, loadedMessagesFor]);
 
   // Update incoming request list whenever polling returns new data.
   useEffect(() => {
@@ -910,7 +961,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
         });
 
         setLiveInfo(restoredLive);
-        setMessages([]);
+       
         messagesSeenRef.current.clear();
         setViewerCount(rtcClient.remoteUsers.length);
         setIsMicMuted(false);
@@ -1487,7 +1538,9 @@ export default function AgentLiveStreaming({ astrologerId }) {
       );
 
       const currentStreamId = streamId || savedSession.streamId;
-
+if (currentStreamId) {
+  localStorage.removeItem(`liveChatMessages_${currentStreamId}`);
+}
       // 1. Stop remote viewer tracks and interaction.
       stopRemoteTracks();
 
@@ -2405,7 +2458,7 @@ export default function AgentLiveStreaming({ astrologerId }) {
                     </span>
                   </div>
 
-                  {activeInteraction?.interactionType === "VIDEO" && (
+                  {/* {activeInteraction?.interactionType === "VIDEO" && (
                     <div className="absolute right-3 top-3 z-30 w-[125px] overflow-hidden rounded-xl border-2 border-white/70 bg-gray-900 shadow-2xl sm:right-5 sm:top-5 sm:w-[210px]">
                       <div className="flex items-center justify-between bg-black/80 px-2 py-1.5">
                         <span className="text-[10px] font-semibold sm:text-xs">
@@ -2432,7 +2485,102 @@ export default function AgentLiveStreaming({ astrologerId }) {
                         )}
                       </div>
                     </div>
-                  )}
+                  )} */}
+
+{activeInteraction && (
+  <div className="absolute right-3 top-3 z-30 w-[180px] overflow-hidden rounded-xl border-2 border-white/70 bg-gray-900 shadow-2xl sm:right-5 sm:top-5 sm:w-[240px]">
+
+    {/* Interaction Header */}
+    <div className="flex items-center justify-between bg-black/80 px-3 py-2">
+      <span className="text-xs font-semibold text-white">
+        Viewer
+      </span>
+
+      <span className="flex items-center gap-1 text-[10px] text-green-400">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
+        {activeInteraction.interactionType === "VIDEO"
+          ? remoteVideoUid
+            ? "Connected"
+            : "Connecting"
+          : remoteAudioTrackRef.current
+            ? "Connected"
+            : "Connecting"}
+      </span>
+    </div>
+
+    {/* VIDEO INTERACTION */}
+    {activeInteraction.interactionType === "VIDEO" && (
+      <div
+        id="interaction-viewer-container"
+        className="relative aspect-[3/4] w-full overflow-hidden bg-black"
+      >
+        {remoteVideoUid ? (
+          <div
+            id={`interaction-viewer-${remoteVideoUid}`}
+            className="h-full w-full"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center p-3 text-center text-xs text-gray-400">
+            <div>
+              <i className="fa-solid fa-video mb-2 text-2xl" />
+              <p>Waiting for viewer video...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* AUDIO INTERACTION */}
+    {activeInteraction.interactionType === "AUDIO" && (
+      <div className="flex min-h-[145px] flex-col items-center justify-center bg-gradient-to-br from-indigo-950 via-purple-950 to-slate-950 p-4">
+
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-full border border-purple-300/30 bg-purple-500/20">
+
+          <i className="fa-solid fa-user text-2xl text-purple-200" />
+
+          {remoteAudioTrackRef.current && (
+            <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-green-500 text-white">
+              <i className="fa-solid fa-microphone text-[10px]" />
+            </span>
+          )}
+        </div>
+
+        <p className="mt-3 text-sm font-semibold text-white">
+          Audio Consultation
+        </p>
+
+        <p className="mt-1 text-[10px] text-purple-200">
+          {remoteAudioTrackRef.current
+            ? "Viewer microphone connected"
+            : "Waiting for viewer microphone..."}
+        </p>
+
+        <div className="mt-3 flex items-center gap-1">
+          {[1, 2, 3, 4, 5].map((bar) => (
+            <span
+              key={bar}
+              className="h-3 w-1 animate-pulse rounded-full bg-green-400"
+              style={{
+                animationDelay: `${bar * 100}ms`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Interaction Type */}
+    <div className="bg-black/80 px-3 py-2 text-center">
+      <span className="text-[10px] font-medium text-white/70">
+        {activeInteraction.interactionType === "VIDEO"
+          ? "Video Consultation"
+          : "Audio Consultation"}
+      </span>
+    </div>
+
+  </div>
+)}
+
 
                   <div className="absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/15 bg-black/75 p-2 shadow-xl backdrop-blur-xl">
                     <button
@@ -2526,14 +2674,14 @@ export default function AgentLiveStreaming({ astrologerId }) {
                           className={`w-fit max-w-[90%] rounded-xl border px-3 py-1 ${
                             msg.type === "gift"
                               ? "border-amber-100 bg-amber-200"
-                              : "border-gray-100 bg-gradient-to-r from-purple-300 via-yellow-200 to-violet-300"
+                              : "border-gray-100 bg-gradient-to-r from-purple-300 via-yellow-100 to-violet-300"
                           } ${
                             msg.sender?.toLowerCase().includes("astrologer")
                               ? "ml-auto"
                               : "mr-auto"
                           }`}
                         >
-                          <p className="text-[10px] text-purple-600">
+                          <p className="text-[10px] text-purple-800">
                             {msg.sender
                               ?.split("_")[0]
                               ?.replace(/^./, (char) => char.toUpperCase())}
